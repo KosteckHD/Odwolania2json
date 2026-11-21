@@ -1413,6 +1413,12 @@ document.addEventListener("pdf-back", focusActiveField);
 
 /* ---------- typy dokumentów ---------- */
 
+// kreator zapisał nowy typ w backendzie: lista typów do ponownego pobrania
+document.addEventListener("types-changed", () => {
+  state.types = null;
+  if (state.view === "types") loadTypes();
+});
+
 async function loadTypes() {
   if (state.types) return renderTypes();
   el.typesSource.textContent = "Wczytywanie listy typów…";

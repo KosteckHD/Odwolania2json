@@ -11,6 +11,8 @@ import {
   extractWithMock,
   parseDocuments,
   pickMockEntry,
+  saveDocumentType,
+  TYPES_URL,
 } from "../api.js";
 
 const fixture = JSON.parse(await readFile(new URL("../mock/extract-response.json", import.meta.url), "utf8"));
@@ -170,4 +172,30 @@ test("extractWithMock: wpisy z próbki z nazwami wybranych plików", async (t) =
   // kopia, nie referencja do próbki
   result.documents[0].data.OdwolanieKIO.miejscowosc = "X";
   assert.notEqual(fixture.documents[0].data.OdwolanieKIO.miejscowosc, "X");
+});
+
+test("saveDocumentType: wysyła YAML i schemat jako JSON i zwraca odpowiedź backendu", async () => {
+  let sent;
+  const saved = { doc_type: "odbior", label: "Odbiór", files: ["configs/documents/odbior.yaml", "schemas/odbior.schema.json"] };
+  const result = await saveDocumentType({ yaml: "id: odbior\n", schema: "{}" }, {
+    fetchImpl: async (url, init) => { sent = { url, init }; return jsonResponse(saved, 201); },
+  });
+  assert.deepEqual(result, saved);
+  assert.equal(sent.url, TYPES_URL);
+  assert.equal(sent.init.method, "POST");
+  assert.deepEqual(JSON.parse(sent.init.body), { yaml: "id: odbior\n", schema: "{}" });
+});
+
+test("saveDocumentType: odrzucenie pokazuje komunikat backendu", async () => {
+  const fetchImpl = async () => jsonResponse({ error: { code: "type_exists", message: "Typ „przelew” już istnieje." } }, 409);
+  await assert.rejects(saveDocumentType({ yaml: "a", schema: "b" }, { fetchImpl }),
+    (e) => e instanceof ApiError && e.status === 409 && e.message === "Typ „przelew” już istnieje.");
+});
+
+test("saveDocumentType: stary backend bez zapisu i brak sieci mają zrozumiały komunikat", async () => {
+  const old = async () => new Response("Method Not Allowed", { status: 405 });
+  await assert.rejects(saveDocumentType({ yaml: "a", schema: "b" }, { fetchImpl: old }), /Pobierz pliki i dodaj je ręcznie/);
+  const offline = async () => { throw new TypeError("Failed to fetch"); };
+  await assert.rejects(saveDocumentType({ yaml: "a", schema: "b" }, { fetchImpl: offline }),
+    (e) => e.kind === "network");
 });

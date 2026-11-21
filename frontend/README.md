@@ -49,13 +49,13 @@ node --test frontend/tests/
 | --- | --- |
 | `index.html`, `styles.css` | układ i wygląd panelu (zasady w [DESIGN.md](DESIGN.md)) |
 | `app.js` | stan, renderowanie listy plików i rubryk, edycja, wstawianie z PDF-u, pobieranie |
-| `api.js` | klient `POST /api/extract`, opcjonalne `GET /api/document-types`, atrapa |
+| `api.js` | klient `POST /api/extract`, `GET` i `POST /api/document-types` (lista i zapis typów), atrapa |
 | `fields.js` | opis rubryk dla typów `odwolanie`, `pelnomocnictwo`, `przelew` (`DOC_TYPES`). Inne typy wyświetlają się z kluczy JSON |
 | `parse.js` | czyste funkcje zamieniające tekst na wartość rubryki |
 | `pdfview.js` | podgląd PDF-u z warstwą tekstu (PDF.js z `vendor/pdfjs`) |
 | `zip.js` | ZIP bez kompresji do pobrania całej sprawy |
 | `draft.js` | czyste funkcje kopii roboczej poprawek (klucz sprawy, zapis, dopasowanie, opis) |
-| `wizard.js` | kreator „Dodaj typ dokumentu” w widoku „Typy dokumentów” |
+| `wizard.js` | kreator „Dodaj typ dokumentu” w widoku „Typy dokumentów”: zapis na serwerze („Dodaj do systemu”) albo pobranie plików |
 | `mock/` | próbka odpowiedzi API i testowe PDF-y |
 | `tests/` | testy `node:test` |
 | `PRODUCT.md`, `DESIGN.md`, `API-PROPOZYCJE.md` | kontekst produktu, zasady wyglądu, propozycje zmian API |
