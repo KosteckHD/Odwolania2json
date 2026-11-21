@@ -436,3 +436,9 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .pdfv-stage[data-zoomed="true"] { overflow: auto; place-items: start center; padding: 12px; }
 .sheet-body[data-full="true"] { grid-template-columns: minmax(0, 1fr); }
 .sheet-body[data-full="true"] .fields-pane, .sheet-body[data-full="true"] .splitter { display: none; }
+
+/* wiersz PDF-u wybrany z klawiatury (strzałki w podglądzie) */
+.textLayer span.is-picked { background: rgba(140, 42, 21, .22); box-shadow: 0 0 0 1px var(--brand); }
+/* stałe miejsce na pasek przewijania: bez tego strona dopasowana do szerokości
+   włączała i wyłączała pasek, a podgląd przerysowywał się w kółko */
+.pdfv-stage { scrollbar-gutter: stable; }

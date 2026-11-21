@@ -650,7 +650,9 @@ function fillSheetInfo(info, index, entry) {
   if (edited) parts.push(`poprawiono ręcznie: ${edited}`);
   info.replaceChildren(parts.join(" · "));
   if (state.sheetMode === "fields") {
-    info.append(node("span", "sheet-hint", "Wpisuj wprost w rubryki albo zaznacz tekst w PDF-ie."));
+    info.append(node("span", "sheet-hint", state.showPdf
+      ? "Wpisuj wprost w rubryki albo zaznacz tekst w PDF-ie (z klawiatury: Alt+↓ w rubryce)."
+      : "Wpisuj wprost w rubryki."));
   }
 }
 
@@ -671,6 +673,7 @@ function pdfPane(index) {
     viewer = createPdfViewer(file, state.urls[index], `Podgląd: ${file.name}`);
     viewers.set(file, viewer);
   }
+  viewer.element.dataset.target = state.active?.index === index ? state.active.field.label : "";
   wrap.append(viewer.element);
   return wrap;
 }
@@ -870,9 +873,10 @@ function fieldBlock(field, value, ctx, path) {
   wrap.append(head, box, error);
   const activate = () => {
     if (state.active?.path === path && state.active.index === index) return;
-    state.active = { index, path, field, apply: control.apply };
+    state.active = { index, path, field, apply: control.apply, wrap };
     el.sheet.querySelectorAll(".field[data-active]").forEach((f) => f.removeAttribute("data-active"));
     wrap.dataset.active = "true";
+    el.sheet.querySelectorAll(".pdfv").forEach((v) => { v.dataset.target = field.label; });
   };
   ["focusin", "pointerdown", "input"].forEach((t) => wrap.addEventListener(t, activate));
   updateTags();
@@ -1197,6 +1201,46 @@ insertBtn.addEventListener("click", () => {
   hideInsertButton();
 });
 document.addEventListener("scroll", hideInsertButton, true);
+
+/* to samo z klawiatury: Alt+↓ w rubryce → podgląd PDF, strzałki wybierają wiersz, Enter wstawia */
+
+function leavePdfFull() {
+  if (!state.pdfFull) return;
+  state.pdfFull = false;
+  const body = el.sheet.querySelector(".sheet-body");
+  if (body) body.dataset.full = "false";
+  el.sheet.querySelector(".pdfv-full")?.setAttribute("aria-pressed", "false");
+}
+
+/** Fokus z powrotem na ostatnią rubrykę (zaznaczona opcja, pole albo pierwsza kratka). */
+function focusActiveField() {
+  leavePdfFull();
+  const wrap = state.active?.wrap?.isConnected ? state.active.wrap : el.sheet.querySelector(".fields-pane .field");
+  wrap?.querySelector("input[type=radio]:checked, input:not([type=radio]), textarea, input[type=radio]")?.focus();
+}
+
+document.addEventListener("keydown", (event) => {
+  if (!event.altKey || event.key !== "ArrowDown" || !event.target.closest?.(".fields-pane")) return;
+  const stage = el.sheet.querySelector(".pdfv-stage");
+  event.preventDefault();
+  if (stage) stage.focus();
+  else announce("Podgląd PDF jest wyłączony. Włącz przycisk „Podgląd PDF”.");
+});
+
+document.addEventListener("pdf-pick", (event) => {
+  const ready = state.active && state.active.index === state.selected && state.sheetMode === "fields";
+  if (!ready) {
+    announce("Najpierw wybierz rubrykę po lewej, potem wróć do podglądu klawiszami Alt+↓.");
+    return;
+  }
+  const { field, wrap } = state.active;
+  leavePdfFull();
+  state.active.apply(event.detail);
+  if (!wrap.contains(document.activeElement)) focusActiveField();
+  const problem = wrap.querySelector(".field-error:not([hidden])");
+  announce(problem?.textContent ? `${field.label}: ${problem.textContent}` : `Wstawiono do rubryki: ${field.label}.`);
+});
+document.addEventListener("pdf-back", focusActiveField);
 
 /* ---------- typy dokumentów ---------- */
 

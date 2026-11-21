@@ -93,6 +93,10 @@ export function pickMockEntry(fileName, index, documents) {
   return documents[index % documents.length];
 }
 
+// Pliki, które atrapa już raz zwróciła z błędem. Ponowna wysyłka tego samego
+// pliku (np. „Ponów błędne”) się udaje, jak po chwilowej awarii OCR albo modelu.
+const failedOnce = new WeakSet();
+
 /** Atrapa: wpisy z próbki dla wybranych plików, z opóźnieniem jak przy LLM. */
 export async function extractWithMock(files, { signal, delayMs = 1400 } = {}) {
   if (files.length === 0) throw new ApiError("invalid_request", EMPTY_SELECTION_MESSAGE, 400);
@@ -101,12 +105,20 @@ export async function extractWithMock(files, { signal, delayMs = 1400 } = {}) {
   const fixture = await (await fetch(fixtureUrl, { signal })).json();
   await wait(delayMs, signal);
 
-  const documents = files.map((file, index) => ({
-    ...structuredClone(pickMockEntry(file.name, index, fixture.documents)),
-    filename: file.name,
-  }));
+  const documents = files.map((file, index) => {
+    let entry = pickMockEntry(file.name, index, fixture.documents);
+    if (entry.status === "error") {
+      if (failedOnce.has(file)) entry = retryEntry(fixture.documents) ?? entry;
+      else failedOnce.add(file);
+    }
+    return { ...structuredClone(entry), filename: file.name };
+  });
   return { documents, meta: null };
 }
+
+/** Wynik udanego ponowienia w atrapie: skan pełnomocnictwa odczytany przez OCR. */
+const retryEntry = (documents) =>
+  documents.find((d) => d.type === "pelnomocnictwo") ?? documents.find((d) => d.status === "ok");
 
 function wait(ms, signal) {
   return new Promise((resolve, reject) => {
