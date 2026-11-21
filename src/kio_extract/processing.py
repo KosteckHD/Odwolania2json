@@ -10,7 +10,7 @@ from .extraction_engine import resolve_extractor
 from .pdf_reader import extract_pdf
 from .prompt_extraction import PromptExtractor
 from .ocr import tesseract_ocr
-from .normalization import normalize_polish_bank_account, normalize_ted
+from .normalization import normalize_bzp, normalize_polish_bank_account, normalize_ted
 
 
 def normalize_result(value, schema):
@@ -23,6 +23,8 @@ def normalize_result(value, schema):
         return normalize_polish_bank_account(value)
     if isinstance(value, str) and schema.get("x-normalizer") == "ted":
         return normalize_ted(value)
+    if isinstance(value, str) and schema.get("x-normalizer") == "bzp":
+        return normalize_bzp(value)
     return value
 
 

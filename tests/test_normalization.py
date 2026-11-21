@@ -1,12 +1,22 @@
-from kio_extract.normalization import normalize_polish_bank_account, normalize_ted
+from kio_extract.normalization import normalize_bzp, normalize_polish_bank_account, normalize_ted
 
 
-def test_polish_iban_is_normalized_without_losing_leading_zeroes():
+def test_bank_account_keeps_document_form_without_spaces():
+    # UZP 21.11: numer jak w dokumencie, także z przedrostkiem „PL”; zera wiodące zostają
     account = "00123456789012345678901234"
-    assert normalize_polish_bank_account("PL" + account) == account
-    assert normalize_polish_bank_account("PL00 1234 5678 9012 3456 7890 1234") == account
+    assert normalize_polish_bank_account("PL" + account) == "PL" + account
+    assert normalize_polish_bank_account("pl00 1234 5678 9012 3456 7890 1234") == "PL" + account
+    assert normalize_polish_bank_account("00 1234 5678 9012 3456 7890 1234") == account
     assert normalize_polish_bank_account("DE" + account) == "DE" + account
     assert normalize_polish_bank_account("PL123") == "PL123"
+
+
+def test_bzp_number_matches_reference_format():
+    assert normalize_bzp("2025/BZP 00143067/01") == "2025/BZP00143067/01"
+    assert normalize_bzp("2025 / bzp 00518466") == "2025/BZP00518466"
+    assert normalize_bzp("2025/BZP00518466") == "2025/BZP00518466"
+    assert normalize_bzp("BZP 00518466") == "BZP 00518466"
+    assert normalize_bzp("2025/BZP 0051846") == "2025/BZP 0051846"
 
 
 def test_ted_normalization_ignores_newlines_and_preserves_number():

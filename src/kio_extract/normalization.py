@@ -16,12 +16,24 @@ def normalize_digits(value: str) -> str | None:
 
 
 def normalize_polish_bank_account(value: str) -> str:
+    """Numer rachunku tak jak w dokumencie, bez spacji: z przedrostkiem „PL”, jeśli dokument go ma.
+
+    UZP (21.11): w zbiorze testowym numer jest zapisany jak w dokumencie; brak „PL”
+    w części wzorców treningowych to ich błąd.
+    """
     compact = "".join(value.split()).upper()
-    if re.fullmatch(r"PL[0-9]{26}", compact):
-        return compact[2:]
-    if re.fullmatch(r"[0-9]{26}", compact):
+    if re.fullmatch(r"(?:PL)?[0-9]{26}", compact):
         return compact
     return value
+
+
+def normalize_bzp(value: str) -> str:
+    """Numer ogłoszenia BZP w formacie wzorców UZP: `RRRR/BZP########` (opcjonalnie `/##`), bez spacji."""
+    match = re.fullmatch(r"([0-9]{4})\s*/\s*BZP\s*([0-9]{8})(?:\s*/\s*([0-9]{2}))?", value.strip(), re.IGNORECASE)
+    if not match:
+        return value
+    year, number, correction = match.groups()
+    return f"{year}/BZP{number}" + (f"/{correction}" if correction else "")
 
 
 def normalize_ted(value: str) -> str:
