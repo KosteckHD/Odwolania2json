@@ -20,7 +20,11 @@ const state = {
   results: null,      // wpisy odpowiedzi wyrównane po pozycji z `files`
   meta: null,         // opcjonalne informacje o przebiegu (model, czas)
   pending: false,
-  requestError: null,
+  pendingSet: null,   // pozycje w trakcie ponawiania (null = wszystkie pliki)
+  abort: null,        // AbortController bieżącej wysyłki
+  slow: false,        // wysyłka trwa dłużej niż zwykle
+  notice: null,       // komunikat nad listą: { kind: "error" | "info", text, retry }
+  lastRun: null,      // pozycje nieudanej wysyłki do „Spróbuj ponownie” (null = wszystkie)
   selected: null,
   sheetMode: "fields",
   types: null,        // lista typów do widoku „Typy dokumentów”
@@ -79,7 +83,9 @@ const el = {
   form: $("upload-form"), drop: $("drop"), input: $("file-input"), folderInput: $("folder-input"),
   fileLabel: $("file-label"),
   list: $("file-list"), actions: $("actions"), submit: $("submit-btn"), note: $("actions-note"),
-  message: $("request-message"), tally: $("tally"), sheet: $("sheet"),
+  retryFailed: $("retry-failed"), cancel: $("cancel-btn"), announcer: $("announcer"),
+  message: $("request-message"), messageText: $("request-text"), retryRequest: $("retry-request"),
+  tally: $("tally"), sheet: $("sheet"), work: document.querySelector(".work"),
   summary: $("summary"), downloadAll: $("download-all"), downloadAllLabel: $("download-all-label"),
   typesList: $("types-list"), typesSource: $("types-source"),
 };
@@ -100,8 +106,10 @@ function setDrawer(open) {
   el.app.dataset.drawer = open ? "open" : "closed";
   el.menuBtn.setAttribute("aria-expanded", String(open));
   el.scrim.hidden = !open;
+  el.work.inert = open;   // przy otwartej szufladzie Tab nie ucieka do strony pod spodem
   if (open) el.rail.querySelector(".rail-item")?.focus();
 }
+mobile.addEventListener("change", () => { if (!mobile.matches && el.app.dataset.drawer === "open") setDrawer(false); });
 
 let savedNav = null;
 try { savedNav = localStorage.getItem(NAV_KEY); } catch { /* bez pamięci */ }
@@ -120,7 +128,7 @@ function makeRoomForResults() {
   }
 }
 el.menuBtn.addEventListener("click", () => setDrawer(true));
-el.scrim.addEventListener("click", () => setDrawer(false));
+el.scrim.addEventListener("click", () => { setDrawer(false); el.menuBtn.focus(); });
 
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -141,10 +149,12 @@ $("new-case").addEventListener("click", () => {
 });
 
 function resetCase() {
+  state.abort?.abort();   // wynik przerwanej wysyłki nie trafi już do nowej sprawy
   state.urls.forEach((u) => URL.revokeObjectURL(u));
   Object.assign(state, {
     caseName: null, files: [], urls: [], results: null, meta: null,
-    requestError: null, selected: null, pending: false, edits: [], active: null,
+    notice: null, lastRun: null, selected: null, pending: false, pendingSet: null, abort: null, slow: false,
+    edits: [], active: null,
   });
   el.input.value = "";
   el.folderInput.value = "";
@@ -196,9 +206,10 @@ function addFiles(fileList, caseName = null) {
   state.files = [...state.files, ...pdfs];
   state.urls = [...state.urls, ...pdfs.map((f) => URL.createObjectURL(f))];
   state.results = null;
-  state.requestError = skipped && !caseName
+  const problem = skipped && !caseName
     ? `Pominięto ${skipped} ${skipped === 1 ? "plik, który nie jest" : "pliki, które nie są"} PDF-em.`
     : pdfs.length === 0 ? "W wybranym folderze nie ma plików PDF." : null;
+  state.notice = problem ? { kind: "error", text: problem, retry: false } : null;
   if (state.selected === null && state.files.length) state.selected = 0;
   render();
 }
@@ -256,48 +267,133 @@ function selectDocument(index) {
 
 /* ---------- wysyłka ---------- */
 
-el.form.addEventListener("submit", async (event) => {
+el.form.addEventListener("submit", (event) => {
   event.preventDefault();
+  runExtraction(null);
+});
+el.retryFailed.addEventListener("click", () => runExtraction(failedPositions()));
+el.retryRequest.addEventListener("click", () => runExtraction(state.lastRun));
+el.cancel.addEventListener("click", () => state.abort?.abort());
+
+const failedPositions = () => (state.results ?? []).flatMap((r, i) => (r.status === "error" ? [i] : []));
+
+/**
+ * Wysyła pliki do ekstrakcji. `positions` = null: cała sprawa (wyniki zastępowane),
+ * tablica pozycji: tylko te pliki, a ich wpisy trafiają na swoje miejsca; reszta
+ * wyników i ręczne poprawki zostają. Anulowanie albo błąd całego żądania
+ * przywraca stan sprzed wysyłki.
+ */
+async function runExtraction(positions) {
   if (state.pending) return;
   if (state.files.length === 0) {
-    state.requestError = "Wybierz co najmniej jeden plik PDF.";
+    state.notice = { kind: "error", text: "Wybierz co najmniej jeden plik PDF.", retry: false };
     render();
     return;
   }
-  Object.assign(state, { pending: true, requestError: null, results: null, meta: null, active: null });
+  if (positions && (!state.results || positions.length === 0)) positions = null;
+  const files = positions ? positions.map((i) => state.files[i]) : [...state.files];
+  const before = { results: state.results, meta: state.meta, edits: state.edits };
+  const controller = new AbortController();
+  Object.assign(state, {
+    pending: true, pendingSet: positions ? new Set(positions) : null, abort: controller,
+    slow: false, notice: null, active: null,
+  });
+  if (!positions) Object.assign(state, { results: null, meta: null });
+  hideInsertButton();
   render();
+  el.cancel.focus();   // przycisk „Przetwórz” jest teraz zablokowany, więc fokus nie może na nim zostać
 
   const extract = state.mode === "mock" ? extractWithMock : extractWithApi;
   const started = performance.now();
   const slowTimer = setTimeout(() => {
-    el.note.textContent = "To trwa dłużej niż zwykle. Model wciąż czyta dokumenty.";
+    if (state.abort !== controller) return;
+    state.slow = true;
+    render({ sheet: false });   // bez przebudowy arkusza: nie zabieramy fokusu z rubryki
   }, 8000);
+  let outcome;
   try {
-    const { documents, meta } = await extract(state.files);
-    state.results = documents;
-    state.edits = [];
-    state.meta = { ...meta, seconds: (performance.now() - started) / 1000 };
-    makeRoomForResults();
-    const firstOk = documents.findIndex((r) => r.status === "ok");
-    state.selected = firstOk >= 0 ? firstOk : 0;
+    outcome = await extract(files, { signal: controller.signal });
+    if (controller.signal.aborted) throw new DOMException("Przerwano", "AbortError");
   } catch (error) {
-    state.requestError = error instanceof ApiError ? error.message : "Nieoczekiwany błąd aplikacji. Spróbuj ponownie.";
-    if (!(error instanceof ApiError)) console.error(error);
-  } finally {
-    clearTimeout(slowTimer);
-    state.pending = false;
-    render();
+    outcome = { error };
   }
-});
+  clearTimeout(slowTimer);
+  if (state.abort !== controller) return;   // w międzyczasie zaczęto nową sprawę
+
+  const focusWasHere = !document.activeElement || document.activeElement === document.body
+    || el.actions.contains(document.activeElement);
+  Object.assign(state, { pending: false, pendingSet: null, abort: null, slow: false });
+  let focusTarget = el.submit;
+
+  if (outcome.error) {
+    const { error } = outcome;
+    if (!positions) Object.assign(state, before);
+    if (controller.signal.aborted || error?.name === "AbortError") {
+      state.notice = {
+        kind: "info", retry: false,
+        text: positions
+          ? "Ponawianie anulowane. Wyniki i poprawki zostały bez zmian."
+          : state.results
+            ? "Przetwarzanie anulowane. Wcześniejsze wyniki i poprawki zostały bez zmian."
+            : "Przetwarzanie anulowane. Pliki zostały na liście, możesz je przetworzyć ponownie.",
+      };
+    } else {
+      const known = error instanceof ApiError;
+      if (!known) console.error(error);
+      const retry = !known || error.kind !== "invalid_request";
+      // „…nie powiodło się. (HTTP 502)” → „…nie powiodło się (HTTP 502).”
+      const text = known ? error.message.replace(/\.?\s*\((HTTP \d+)\)$/, " ($1).") : "Nieoczekiwany błąd aplikacji.";
+      state.notice = {
+        kind: "error", retry,
+        text: retry ? `${text} Pliki${state.results ? ", wyniki i poprawki" : ""} zostały bez zmian.` : text,
+      };
+      state.lastRun = positions;
+      if (retry) focusTarget = el.retryRequest;
+    }
+  } else {
+    const { documents, meta } = outcome;
+    const seconds = (performance.now() - started) / 1000;
+    if (positions) {
+      const results = [...state.results];
+      const edits = [...state.edits];
+      positions.forEach((pos, k) => { results[pos] = documents[k]; delete edits[pos]; });
+      Object.assign(state, { results, edits, meta: { ...state.meta, ...meta, seconds } });
+    } else {
+      Object.assign(state, { results: documents, edits: [], meta: { ...meta, seconds } });
+      makeRoomForResults();
+      const firstOk = documents.findIndex((r) => r.status === "ok");
+      state.selected = firstOk >= 0 ? firstOk : 0;
+    }
+    state.lastRun = null;
+    announce(`${positions ? "Ponowiono" : "Przetworzono"} ${documents.length} ${plural(documents.length, "plik", "pliki", "plików")}. ${tallyText(documents)}`);
+    focusTarget = failedPositions().length ? el.retryFailed : null;
+  }
+  // przy ponawianiu arkusz innego dokumentu zostaje, żeby nie przerywać wpisywania
+  render({ sheet: !positions || positions.includes(state.selected) });
+  if (focusWasHere) (focusTarget ?? el.list.querySelectorAll(".file-main")[state.selected] ?? el.submit).focus();
+}
+
+function tallyText(documents) {
+  const count = (s) => documents.filter((d) => d.status === s).length;
+  return [["rozpoznane", count("ok")], ["nierozpoznane", count("unknown")], ["z błędem", count("error")]]
+    .filter(([, n]) => n).map(([label, n]) => `${label}: ${n}`).join(", ")
+    .replace(/^./, (c) => c.toUpperCase()) + ".";
+}
+
+/** Komunikat tylko dla czytnika ekranu (region role="status"). */
+function announce(text) {
+  el.announcer.textContent = "";
+  setTimeout(() => { el.announcer.textContent = text; }, 50);
+}
 
 /* ---------- render ---------- */
 
 function statusAt(index) {
-  if (state.pending) return "pending";
+  if (state.pending && (!state.pendingSet || state.pendingSet.has(index))) return "pending";
   return state.results?.[index]?.status ?? "selected";
 }
 
-function render() {
+function render({ sheet = true } = {}) {
   el.viewCase.hidden = state.view !== "case";
   el.viewHelp.hidden = state.view !== "help";
   el.viewTypes.hidden = state.view !== "types";
@@ -322,20 +418,30 @@ function render() {
   el.drop.dataset.compact = String(state.files.length > 0);
   el.drop.querySelector(".drop-title").textContent = state.files.length ? "Dodaj:" : "Przeciągnij tutaj pliki PDF";
   el.fileLabel.textContent = state.files.length ? "Pliki" : "Wybierz pliki z dysku";
-  el.message.hidden = !state.requestError;
-  el.message.textContent = state.requestError ?? "";
+  const notice = state.notice;
+  el.message.hidden = !notice;
+  el.message.dataset.kind = notice?.kind ?? "error";
+  el.messageText.textContent = notice?.text ?? "";
+  el.retryRequest.hidden = !notice?.retry || state.pending;
   el.actions.hidden = state.files.length === 0;
   el.submit.disabled = state.pending;
   el.submit.classList.toggle("btn-line", Boolean(state.results));
   const n = state.files.length;
   el.submit.textContent = state.pending
-    ? "Przetwarzanie…"
+    ? (state.pendingSet ? "Ponawianie…" : "Przetwarzanie…")
     : state.results ? "Przetwórz ponownie" : `Przetwórz ${n} ${plural(n, "plik", "pliki", "plików")}`;
-  el.note.textContent = state.pending ? "System rozpoznaje typ każdego dokumentu po treści i wyciąga dane." : "";
+  const failed = state.pending ? 0 : failedPositions().length;
+  el.retryFailed.hidden = failed === 0;
+  el.retryFailed.textContent = `Ponów błędne (${failed})`;
+  el.cancel.hidden = !state.pending;
+  el.note.textContent = !state.pending ? ""
+    : state.slow ? "To trwa dłużej niż zwykle. Model wciąż czyta dokumenty. Możesz poczekać albo anulować."
+    : state.pendingSet ? `Ponowne przetwarzanie: ${state.pendingSet.size} ${plural(state.pendingSet.size, "plik", "pliki", "plików")} z błędem.`
+    : "System rozpoznaje typ każdego dokumentu po treści i wyciąga dane.";
 
   renderList();
   renderSummary();
-  renderSheet();
+  if (sheet) renderSheet();
 }
 
 function renderList() {
@@ -461,14 +567,15 @@ function renderSheet() {
   const title = node("h2", "sheet-title", file.name);
   title.id = "sheet-heading";
   titleRow.append(title);
-  if (entry || state.pending) titleRow.append(badgeFor(statusAt(index), entry));
+  const pending = statusAt(index) === "pending";
+  if (entry || pending) titleRow.append(badgeFor(statusAt(index), entry));
   head.append(titleRow);
 
   let left;
-  if (state.pending) {
+  if (pending) {
     left = node("div", "skeleton");
-    left.setAttribute("aria-label", "Trwa przetwarzanie dokumentu");
     for (let i = 0; i < 8; i++) left.append(node("div"));
+    left.append(node("p", "sr-only", "Trwa przetwarzanie dokumentu."));
   } else if (!entry) {
     left = stateBlock("Plik czeka na przetworzenie",
       ["Dodaj pozostałe dokumenty sprawy i kliknij „Przetwórz”. Dane tego pliku pojawią się w tym miejscu."]);
@@ -480,7 +587,7 @@ function renderSheet() {
   } else if (entry.status === "error") {
     left = stateBlock("Nie udało się przetworzyć pliku", [
       entry.error?.message ?? "Wystąpił błąd podczas odczytu dokumentu.",
-      "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników.",
+      "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników, dopóki nie uda się go przetworzyć: spróbuj ponownie przyciskiem „Ponów błędne”.",
     ]);
     if (entry.error?.code) left.append(node("p", "state-code", `Kod błędu: ${entry.error.code}`));
   } else {
@@ -703,21 +810,30 @@ function fieldBlock(field, value, ctx, path) {
   const index = ctx.index;
   const wrap = node("div", `field field-${field.kind ?? "text"}${field.wide ? " field-wide" : ""}`);
   const id = `f-${index}-${path.replace(/[^\w]/g, "_")}`;
-  const label = node("label", "field-label");
-  label.htmlFor = id;
-  label.append(node("span", "field-no", `${ctx.n}.`), field.label);
+  // wybór tak/nie: etykieta nazywa grupę, ale kliknięcie w nią nie może zaznaczać „tak”
+  const choice = field.kind === "bool" || field.kind === "enum";
+  const head = node("div", "field-label");
+  const label = node(choice ? "span" : "label", "field-name");
+  if (choice) label.id = `${id}-label`;
+  else label.htmlFor = id;
+  label.append(node("span", "field-no", `${ctx.n}.`), " ", field.label);
+  // dopiski i przycisk „cofnij” obok etykiety, nie w niej (opis rubryki przez aria-describedby)
   const tags = node("span", "field-tags");
-  label.append(tags);
+  head.append(label, tags);
   const error = node("p", "field-error");
+  error.id = `${id}-error`;
   error.hidden = true;
+  const tag = (className, text) => Object.assign(node("span", className, text), { id: `${id}-info` });
+  let targets = [];   // elementy z aria-describedby / aria-invalid
 
   const updateTags = () => {
     tags.replaceChildren();
     const current = getPath(dataAt(index), path);
     if (isEdited(index, path)) {
-      tags.append(node("span", "field-edited", "poprawione"));
+      tags.append(tag("field-edited", "poprawione"));
       const undo = node("button", "link-btn", "cofnij");
       undo.type = "button";
+      undo.setAttribute("aria-label", `Cofnij poprawkę: ${field.label}`);
       undo.addEventListener("click", (event) => {
         event.preventDefault();
         setValue(index, path, structuredClone(getPath(state.results[index].data, path) ?? null));
@@ -726,10 +842,10 @@ function fieldBlock(field, value, ctx, path) {
       });
       tags.append(undo);
     } else if (isEmptyValue(current)) {
-      tags.append(node("span", "field-note", "brak w dokumencie"));
+      tags.append(tag("field-note", "brak w dokumencie"));
     } else {
       const source = ctx.evidence.get(path);
-      if (source) tags.append(node("span", "field-source", source));
+      if (source) tags.append(tag("field-source", source));
     }
   };
 
@@ -740,6 +856,7 @@ function fieldBlock(field, value, ctx, path) {
     error.textContent = problem ?? "";
     error.dataset.kind = warn ? "warn" : "error";
     wrap.dataset.invalid = String(Boolean(problem) && !warn);
+    targets.forEach((t) => t.setAttribute("aria-invalid", String(Boolean(problem) && !warn)));
     if (problem && !warn) return;
     setValue(index, path, value);
     updateTags();
@@ -747,7 +864,10 @@ function fieldBlock(field, value, ctx, path) {
   };
 
   const control = controlFor(field, value, id, commit, path);
-  wrap.append(label, control.element, error);
+  const box = control.element;
+  targets = box.matches("input, textarea, [role=radiogroup]") ? [box] : [...box.querySelectorAll("input, textarea")];
+  targets.forEach((t) => t.setAttribute("aria-describedby", `${id}-info ${id}-error`));
+  wrap.append(head, box, error);
   const activate = () => {
     if (state.active?.path === path && state.active.index === index) return;
     state.active = { index, path, field, apply: control.apply };
@@ -766,9 +886,9 @@ function fieldBlock(field, value, ctx, path) {
 function controlFor(field, value, id, commit, path) {
   switch (field.kind) {
     case "digits": case "account": case "code": return cellControl(field, value, id, commit, path);
-    case "date": return dateControl(value, id, commit);
-    case "bool": return choiceControl([["1", "tak", 1], ["0", "nie", 0], ["", "brak informacji", null]], value === true ? 1 : value === false ? 0 : value ?? null, id, commit, field.label);
-    case "enum": return choiceControl([...Object.entries(field.labels ?? {}).map(([v, t]) => [v, t, v]), ["", "brak informacji", null]], value ?? null, id, commit, field.label);
+    case "date": return dateControl(value, id, commit, field.label);
+    case "bool": return choiceControl([["1", "tak", 1], ["0", "nie", 0], ["", "brak informacji", null]], value === true ? 1 : value === false ? 0 : value ?? null, id, commit);
+    case "enum": return choiceControl([...Object.entries(field.labels ?? {}).map(([v, t]) => [v, t, v]), ["", "brak informacji", null]], value ?? null, id, commit);
     case "names": return namesControl(value, id, commit);
     case "amount": return amountControl(value, id, commit);
     default: return textControl(field, value, id, commit);
@@ -857,7 +977,7 @@ function cellControl(field, value, id, commit, path) {
 }
 
 /** Data w trzech grupach kratek: RRRR MM DD. */
-function dateControl(value, id, commit) {
+function dateControl(value, id, commit, fieldLabel) {
   const wrap = node("div", "date-in");
   const m = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const painters = [];
@@ -869,7 +989,7 @@ function dateControl(value, id, commit) {
     input.inputMode = "numeric";
     input.autocomplete = "off";
     input.maxLength = len;
-    input.setAttribute("aria-label", label);
+    input.setAttribute("aria-label", `${fieldLabel}: ${label}`);   // sam „rok” nie mówi, której daty dotyczy
     input.value = m ? m[i + 1] : "";
     input.dataset.key = key;
     const { box, paint } = cellsBox(input, () => len);
@@ -912,18 +1032,17 @@ function dateControl(value, id, commit) {
 }
 
 /** Wybór krzyżykiem: tak / nie / brak informacji (radio). */
-function choiceControl(options, value, id, commit, label) {
+function choiceControl(options, value, id, commit) {
   const group = node("div", "choices");
   group.setAttribute("role", "radiogroup");
-  group.setAttribute("aria-label", label);
+  group.setAttribute("aria-labelledby", `${id}-label`);
   const name = `${id}-r`;
-  options.forEach(([v, text, stored], i) => {
+  options.forEach(([v, text, stored]) => {
     const lab = node("label", "choice");
     const input = document.createElement("input");
     input.type = "radio";
     input.name = name;
     input.value = v;
-    if (i === 0) input.id = id;
     input.checked = stored === value || (stored === null && value == null);
     input.addEventListener("change", () => commit(stored));
     const box = node("span", "choice-box");
@@ -1123,6 +1242,7 @@ function renderTypes() {
 function jsonView(data) {
   const pre = node("pre", "json");
   pre.tabIndex = 0;
+  pre.setAttribute("role", "region");   // przewijany obszar z klawiatury, z nazwą dla czytnika
   pre.setAttribute("aria-label", "Dane dokumentu w formacie JSON");
   JSON.stringify(data, null, 2).split(/("(?:[^"\\]|\\.)*"(?=\s*:)|\bnull\b)/g).forEach((part) => {
     if (/^".*"$/.test(part)) pre.append(node("span", "k", part));

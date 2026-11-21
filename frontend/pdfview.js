@@ -34,7 +34,8 @@ export function createPdfViewer(file, url, title) {
     <p class="pdfv-status">Wczytywanie podglądu…</p>
     <div class="pdfv-stage" tabindex="0"></div>`;
   const stage = element.querySelector(".pdfv-stage");
-  stage.setAttribute("aria-label", title);
+  stage.setAttribute("role", "region");
+  stage.setAttribute("aria-label", `${title}. Strony: Page Up i Page Down.`);
   const status = element.querySelector(".pdfv-status");
   const pageNo = element.querySelector(".pdfv-page-no");
   const view = { doc: null, lib: null, page: 1, zoom: 1, rendering: null, hasText: true };
