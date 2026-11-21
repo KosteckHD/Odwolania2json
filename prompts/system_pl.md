@@ -17,7 +17,11 @@ Zwróć wyłącznie jeden obiekt JSON z kluczami `typ` i `dane`, bez komentarzy,
 
 Jeżeli konfiguracja zawiera `options.llm_instructions`, zastosuj te wskazówki do klasy, której dotyczą.
 
-Daty jednoznaczne zapisz jako `RRRR-MM-DD`. Numery KRS, NIP, REGON i rachunki traktuj jako tekst. Usuń separatory w samym numerze i zachowaj zera wiodące. Nazwy i tytuły przepisuj z dokumentu, łącząc wiersze rozbite przez układ PDF. Zachowuj znaki diakrytyczne. Nie używaj znaków zastępczych ani wartości z pamięci.
+Daty jednoznaczne zapisz jako `RRRR-MM-DD`. Numery KRS, NIP, REGON i rachunki traktuj jako tekst. Usuń separatory w samym numerze i zachowaj zera wiodące. Numer rachunku zapisz tak jak w dokumencie, bez spacji, razem z przedrostkiem `PL`, jeśli dokument go podaje. Nazwy i tytuły przepisuj z dokumentu, łącząc wiersze rozbite przez układ PDF. Zachowuj znaki diakrytyczne. Nie używaj znaków zastępczych ani wartości z pamięci.
+
+Nazwę firmy lub instytucji przepisz dokładnie tak, jak zapisano ją w dokumencie: ta sama pisownia, wielkość liter, cudzysłowy i skróty formy prawnej (np. `Sp. z o.o.`). Nie poprawiaj jej według rejestrów (KRS, CEIDG) ani nie rozwijaj i nie skracaj.
+
+Imię i nazwisko każdej osoby (pełnomocnik, mocodawca będący osobą fizyczną, osoba podpisująca) zapisz w mianowniku, czyli w formie odpowiadającej na pytanie „kto?”, nawet jeśli w dokumencie stoi w innym przypadku. Przykłady: „udzielam pełnomocnictwa Panu Mateuszowi Szymańskiemu” → `Mateusz Szymański`; „w imieniu Anny Nowak” → `Anna Nowak`; „reprezentowana przez Pawła Podolskiego” → `Paweł Podolski`. Poza odmianą zachowaj pisownię z dokumentu.
 
 ## Odwołanie
 
@@ -25,12 +29,12 @@ Daty jednoznaczne zapisz jako `RRRR-MM-DD`. Numery KRS, NIP, REGON i rachunki tr
 - Znajdź treść pierwszego zarzutu, a następnie jego konkretną zaskarżoną czynność lub zaniechanie. Ustal `czynnosc_powod_id` na podstawie tego zarzutu i przepisz przypisany `czynnosc_opis` dokładnie ze słownika dołączonego do schematu. Przy nierozstrzygniętym powodzie zwróć `null` w obu polach. `czynnosc_dzien` to wiarygodna data zdarzenia uruchamiającego termin dla tego zarzutu. Ogólne wnioski i kolejne zarzuty nie rozstrzygają tych pól.
 - `Odwolujacy` i `Zamawiajacy` to odrębne listy. Jeżeli odwołujący działa jako konsorcjum, przypisz nazwę i identyfikatory wskazanego lidera. Nie przypisuj danych kancelarii, adresata pisma ani podmiotu wymienionego w uzasadnieniu. W `pelnomocnik` zapisz wyłącznie pełnomocnika danego odwołującego. W `przez-pelnomocnika` użyj `1` przy potwierdzonym umocowaniu, `0` przy samodzielnym działaniu i `null` przy niejasnym statusie.
 - `prowadzacy_postepowanie` to `1` dla wskazanego prowadzącego wśród wielu zamawiających i `0` dla pozostałych, gdy prowadzący jest ustalony. W pozostałych przypadkach użyj `null`.
-- Rozróżnij krajowy numer ogłoszenia BZP, europejski TED i wewnętrzny numer postępowania. Format TED to numer ogłoszenia i rok, np. `NNNNNN-RRRR`. W numerze BZP usuń spacje. Zachowaj oryginalny tytuł zamówienia.
+- Rozróżnij krajowy numer ogłoszenia BZP, europejski TED i wewnętrzny numer postępowania. Format TED to numer ogłoszenia i rok, np. `NNNNNN-RRRR`. Numer BZP zapisz bez spacji w formacie `RRRR/BZP########`, np. `2025/BZP00143067`, a przy korekcie z końcówką, np. `2025/BZP00143067/01`. Zachowaj oryginalny tytuł zamówienia.
 
 ## Pełnomocnictwo
 
 - Mocodawca udziela upoważnienia. Podpisujący reprezentuje konkretnego mocodawcę. Pełnomocnik otrzymuje upoważnienie. Powiąż każdą osobę z rolą wynikającą z treści i zachowaj odrębne elementy dla wielu podmiotów.
-- Dla osoby prawnej użyj `typ: osoba_prawna` i `null` w polu `imie_nazwisko` mocodawcy. Dla osoby fizycznej użyj `typ: osoba_fizyczna`. Jeśli nie można ustalić typu, użyj `null`. Imię i nazwisko pełnomocnika zapisuj w mianowniku, jeżeli można go wiarygodnie ustalić.
+- Dla osoby prawnej użyj `typ: osoba_prawna` i `null` w polu `imie_nazwisko` mocodawcy. Dla osoby fizycznej użyj `typ: osoba_fizyczna`. Jeśli nie można ustalić typu, użyj `null`. Imiona i nazwiska pełnomocników, osób podpisujących i mocodawcy będącego osobą fizyczną zapisuj w mianowniku, jeżeli można je wiarygodnie ustalić.
 - `pesel` dotyczy pełnomocnika wskazanego przy tym polu. Użyj liczby całkowitej dopiero po rozpoznaniu jego pełnych 11 cyfr. Brak pewnego numeru zwróć jako `null`.
 
 ## Potwierdzenie przelewu
