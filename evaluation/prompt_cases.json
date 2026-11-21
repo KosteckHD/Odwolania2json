@@ -1,0 +1,32 @@
+[
+  {
+    "id": "two_objections_ted",
+    "text": "Warszawa, 12.06.2026\nODWOŁANIE\nOdwołujący: Alpha Test Sp. z o.o., NIP 1111111111\nZamawiający: Urząd Testowy\nOgłoszenie TED: 2026/S 160-999682\nWnosimy odwołanie.\nZarzut nr 1: odwołanie dotyczy publikacji SWZ z dnia 01.06.2026.\nZarzut nr 2: odwołanie dotyczy wyboru oferty z dnia 05.06.2026.",
+    "type": "odwolanie",
+    "checks": {"OdwolanieKIO.czynnosc_powod_id": 4, "ZamowieniePubliczne.numer_ted": "999682-2026"}
+  },
+  {
+    "id": "transfer_multiline_title",
+    "text": "POTWIERDZENIE WYKONANIA PRZELEWU\nData operacji: 12.06.2026\nKwota: 250,00 PLN\nRachunek nadawcy: 00123456789012345678901234\nRachunek odbiorcy: 00987654321098765432109876\nTytuł przelewu\nWpis od odwołania w postępowaniu ABC\nNUMER-123\nNumer referencyjny\nNUMER-123\nStatus\nZREALIZOWANO",
+    "type": "przelew",
+    "checks": {"przelew_bankowy.kwota": 250, "przelew_bankowy.z_rachunku": "00123456789012345678901234", "przelew_bankowy.na_rachunek": "00987654321098765432109876", "przelew_bankowy.tytul": "Wpis od odwołania w postępowaniu ABC NUMER-123"}
+  },
+  {
+    "id": "attorney_and_signatory",
+    "text": "PEŁNOMOCNICTWO\nMocodawca: Alpha Test Sp. z o.o., NIP 1111111111.\nAlpha Test Sp. z o.o. udziela pełnomocnictwa Janowi Testowemu do reprezentowania przed KIO.\nPełnomocnik: Jan Testowy.\nW imieniu mocodawcy podpisuje prezes Anna Testowa.",
+    "type": "pelnomocnictwo",
+    "checks": {"mocodawca.0.data.nazwa": "Alpha Test Sp. z o.o.", "mocodawca.0.podpisujacy.0.imie_nazwisko": "Anna Testowa", "pelnomocnicy.0.imie_nazwisko": "Jan Testowy"}
+  },
+  {
+    "id": "judgment_with_appeal",
+    "text": "WYROK\nKrajowa Izba Odwoławcza oddala odwołanie wniesione przez wykonawcę Alpha Test Sp. z o.o.\nOdwołujący: Alpha Test Sp. z o.o.\nZamawiający: Urząd Testowy.",
+    "type": "unknown",
+    "checks": {}
+  },
+  {
+    "id": "announcement_mentioning_attorney",
+    "text": "OGŁOSZENIE O ZAMÓWIENIU\nPrzedmiotem zamówienia jest dostawa sprzętu. Wykonawca składa pełnomocnictwo jako załącznik do oferty.",
+    "type": "unknown",
+    "checks": {}
+  }
+]

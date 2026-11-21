@@ -1,0 +1,3 @@
+# PDF-y testowe to pliki binarne: bez zamiany końców linii przy checkout
+*.pdf binary
+*.woff2 binary

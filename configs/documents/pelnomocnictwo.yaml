@@ -1,0 +1,12 @@
+id: pelnomocnictwo
+schema: pelnomocnictwo.schema.json
+classification:
+  positive_patterns:
+    - '(?im)^\s*pełnomocnictwo(?:\s+(?:szczególne|procesowe|ogólne|substytucyjne))?\s*$'
+    - '(?i)udziel(?:am|amy|a)\s+(?:niniejszym\s+)?pełnomocnictwa'
+    - '(?i)niniejszym\s+upoważni(?:am|amy|a)\b'
+    - '(?ims)\A(?=.*^\s*(?:mocodawca|udzielający pełnomocnictwa)\b)(?=.*^\s*pełnomocni(?:k|cy)\b)'
+    - '(?ims)\A(?=.*^\s*pełnomocni(?:k|cy)\b)(?=.*\b(?:upoważni(?:am|amy|a)|do udzielania pełnomocnictw|ustanawia\w* pełnomocnikiem)\b)'
+  negative_patterns:
+    - '(?im)^\s*odwołanie\s*$'
+  minimum_matches: 1

@@ -1,0 +1,25 @@
+id: odwolanie
+schema: odwolanie.schema.json
+classification:
+  positive_patterns:
+    - '(?im)^\s*odwołanie(?:\s+do\s+(?:prezesa|krajowej).*)?\s*$'
+    - '(?i)wnos(?:zę|imy)\s+(?:niniejsze\s+)?odwołanie'
+    - '(?i)odwołujący\s*:'
+    - '(?i)zamawiający\s*:'
+  negative_patterns:
+    - '(?im)^\s*(?:wyrok|postanowienie|odpowiedź na odwołanie|zgłoszenie przystąpienia)\b'
+  minimum_matches: 2
+options:
+  czynnosc_powod_opisy:
+    '1': Decyzja o odrzuceniu oferty
+    '2': Ogłoszenie wyboru oferty
+    '3': Decyzja o wykluczeniu wykonawcy
+    '4': Publikacja specyfikacji warunków zamówienia (SWZ)
+    '5': Modyfikacja treści SWZ
+    '6': Odpowiedzi/wyjaśnienia do SWZ
+    '7': Zaniechanie odrzucenia oferty
+    '8': Zaniechanie wykluczenia wykonawcy
+    '9': Decyzja o unieważnieniu postępowania
+    '10': Zaniechanie unieważnienia postępowania
+    '11': Opis przedmiotu zamówienia (OPZ)
+    '12': Projektowane postanowienia umowy
