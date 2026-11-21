@@ -1,4 +1,4 @@
-"""Jeden eksperyment: podzbiór danych UZP z manifestu → CLI → ewaluacja F1 (zasady UZP) → wiersz w tabeli wyników.
+"""Jeden eksperyment: podzbiór danych UZP z manifestu -> CLI -> ewaluacja F1 (zasady UZP) -> wiersz w tabeli wyników.
 
 Przykład (Qwen3.5 9B w HostYourAI, klucz z QWEN_API_KEY w .env):
     .venv/Scripts/python.exe evaluation/experiment.py --name baseline --split development \
