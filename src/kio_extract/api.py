@@ -1,4 +1,5 @@
 import os
+from dataclasses import asdict
 import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -69,9 +70,15 @@ def create_app(processor=None, frontend_dir=FRONTEND):
                 try:
                     with path.open("wb") as output:
                         shutil.copyfileobj(file.file, output)
-                    classification, data = processor.process(path)
+                    if hasattr(processor, "process_with_evidence"):
+                        classification, data, evidence = processor.process_with_evidence(path)
+                    else:
+                        (classification, data), evidence = processor.process(path), ()
                     kind = classification.doc_type
-                    documents.append({"filename": name, "status": "unknown" if kind == "unknown" else "ok", "type": kind, "data": data})
+                    entry = {"filename": name, "status": "unknown" if kind == "unknown" else "ok", "type": kind, "data": data}
+                    if kind != "unknown":
+                        entry["evidence"] = [asdict(item) for item in evidence]
+                    documents.append(entry)
                 except DocumentError as exc:
                     documents.append({"filename": name, "status": "error", "type": None, "data": None,
                                       "error": {"code": exc.code, "message": ERROR_MESSAGES.get(

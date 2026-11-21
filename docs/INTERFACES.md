@@ -14,6 +14,8 @@ Odpowiedź HTTP 200 ma postać obiektu `{"documents":[...]}`. `filename` to nazw
 
 Błąd pojedynczego PDF-u pozostaje w `documents` z `status: "error"`. Puste lub niepoprawne żądanie zwraca HTTP 400 i `{"error":{"code":"invalid_request","message":"Wybierz co najmniej jeden plik PDF."}}`. Awaria całego żądania zwraca kod 5xx. Sekret LLM jest po stronie backendu. Pełną [syntetyczną odpowiedź](fixtures/extract-response.json) można od razu użyć w atrapie klienta.
 
+Wpis `ok` ma też listę `evidence`, czyli źródła pól: `{"field_path": "Odwolujacy.0.krs", "page_number": 1, "method": "regex"}`. Ścieżka odpowiada pozycji w `data` (kropki, indeksy list od zera), strona jest liczona od 1. Pole bez źródła nie ma wpisu, a lista może być pusta. Wpisy `unknown` i `error` nie mają `evidence`. `method` to `regex` (wartość z reguły YAML, strona trafienia) albo `llm+search` (wartość od modelu, strona to pierwsza, na której backend znalazł tę wartość w tekście PDF-u, np. NIP z myślnikami, data `10 maja 2024`, kwota `7 500,00 zł`, numer TED `2024/S 123-123456`). Wartości streszczone przez model, kody z list (`czynnosc_powod_id`) i pola wyboru (`enum`) nie dostają źródła. Gdy tekst strony pochodzi z OCR, metoda ma przedrostek `ocr+`. `evidence` nie trafia do plików w `output/`.
+
 Odpowiedź zawiera też `meta.model`, czyli nazwę modelu LLM albo `null` w trybie regułowym. `GET /api/document-types` zwraca `{"types":[{"doc_type":"przelew","fields":["przelew_bankowy.kwota", ...]}]}` z klas w `configs/documents/`; pola list mają w ścieżce `[]`. Ten sam serwer pod `/` serwuje panel z katalogu `frontend/`.
 
 ## Wewnętrzne kontrakty backendu
@@ -23,16 +25,16 @@ PDF → ExtractedDocument → konfiguracja klasy → Extractor → ExtractionRes
                                                        → walidacja → JSON
 ```
 
-Punktem odniesienia jest [contracts.py](../src/kio_extract/contracts.py). Schematy opisują payload, który trafia do `output/` i do `data` w odpowiedzi HTTP. Główny tryb uruchamia [wspólny system prompt](../prompts/system_pl.md) na każdym PDF-ie. `evidence` pozostaje w pamięci w obecnej wersji. Zmianę formatu HTTP uzgadniają obie osoby i weryfikują na wspólnej próbce.
+Punktem odniesienia jest [contracts.py](../src/kio_extract/contracts.py). Schematy opisują payload, który trafia do `output/` i do `data` w odpowiedzi HTTP. Główny tryb uruchamia [wspólny system prompt](../prompts/system_pl.md) na każdym PDF-ie. CLI zapisuje do `output/` tylko `data`. `evidence` trafia wyłącznie do odpowiedzi HTTP: `DocumentProcessor.process_with_evidence` zwraca `(classification, data, evidence)`, a `process` (używane przez CLI) nadal zwraca `(classification, data)`. Zmianę formatu HTTP uzgadniają obie osoby i weryfikują na wspólnej próbce.
 
 | Symbol | Pola i semantyka |
 | --- | --- |
 | `PageText` | `page_number: int` od 1. `text: str` w kolejności czytania zwróconej przez parser, z podziałem wierszy. |
-| `ExtractedDocument` | `source_path: Path`, `pages: tuple[PageText, ...]` w kolejności PDF, `used_ocr: bool = False`, `pages_needing_ocr: tuple[int, ...] = ()`. Ścieżka służy do I/O i diagnozy. |
+| `ExtractedDocument` | `source_path: Path`, `pages: tuple[PageText, ...]` w kolejności PDF, `used_ocr: bool = False`, `pages_needing_ocr: tuple[int, ...] = ()`, `ocr_pages: tuple[int, ...] = ()` (strony, których tekst odczytał OCR). Ścieżka służy do I/O i diagnozy. |
 | `DocumentConfig` | `doc_type`, roboczy `schema` JSON Schema, `positive_patterns`, `negative_patterns`, `minimum_matches`, `fields`, dowolne `options` należące do typu oraz opcjonalny `extractor`. |
 | `ClassificationResult` | `doc_type: str` dopuszcza nowe klasy i zastrzeżone `unknown`. `reason` to `llm`, `matched`, `no_match` lub `ambiguous`. |
 | `ExtractionResult` | `data: JsonObject`, `evidence: tuple[Evidence, ...] = ()`. Typy JSON to obiekty, listy, tekst, liczby skończone, bool i `None`. |
-| `Evidence` | `field_path: str` w formie `Odwolujacy.0.krs`, `page_number: int`, `method: str` opisująca pochodzenie, np. `regex`. Ścieżki odpowiadają wynikowym pozycjom list od zera. |
+| `Evidence` | `field_path: str` w formie `Odwolujacy.0.krs`, `page_number: int`, `method: str` opisująca pochodzenie: `regex`, `llm+search`, z przedrostkiem `ocr+` dla stron z OCR. Ścieżki odpowiadają wynikowym pozycjom list od zera. |
 | `OCR` | Callable `(source_path: Path, page_number: int) -> str \| None`. `None` oznacza stronę całkowicie białą, a tekst to wynik OCR. Adapter zgłasza `DocumentError("ocr_failed", ...)` przy awarii. Parser kieruje strony z mniej niż 12 znakami alfanumerycznymi do OCR. |
 | `LLMClient` | `extract_json(*, instructions: str, text: str, schema: JsonObject) -> JsonObject`. Backend utrzymuje adapter. Tryb regułowy działa z `llm=None`. |
 
