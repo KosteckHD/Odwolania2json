@@ -44,8 +44,11 @@ export function pickDate(text) {
 }
 
 function iso(y, mo, d) {
-  const month = Number(mo), day = Number(d);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const year = Number(y), month = Number(mo), day = Number(d);
+  if (month < 1 || month > 12 || day < 1) return null;
+  // dzień musi istnieć w danym miesiącu (31.04 albo 29.02 w roku zwykłym → null)
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day > daysInMonth) return null;
   return `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 

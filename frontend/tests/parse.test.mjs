@@ -59,6 +59,14 @@ test("pickDate: błędna albo brakująca data → null", () => {
   assert.equal(pickDate("brak daty"), null);
 });
 
+test("pickDate: dzień spoza miesiąca → null, rok przestępny uwzględniony", () => {
+  assert.equal(pickDate("31.02.2025"), null);
+  assert.equal(pickDate("2025-04-31"), null);
+  assert.equal(pickDate("29 lutego 2025"), null);
+  assert.equal(pickDate("29 lutego 2024"), "2024-02-29");
+  assert.equal(pickDate("31.12.2025"), "2025-12-31");
+});
+
 test("pickAmount: format polski ze spacjami i z kropkami", () => {
   assert.equal(pickAmount("10 000,00 zł"), 10000);
   assert.equal(pickAmount("10.000,00 PLN"), 10000);
