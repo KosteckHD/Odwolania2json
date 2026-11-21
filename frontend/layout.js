@@ -5,6 +5,7 @@ import { plural } from "./draft.js";
 /** Status pliku → tekst i ikona (ikona jest tylko dodatkiem: status zawsze ma tekst). */
 export const STATUS = {
   selected: { text: "Czeka na przetworzenie", icon: "wait" },
+  queued: { text: "W kolejce", icon: "wait" },
   pending: { text: "Przetwarzanie…", icon: "pending" },
   ok: { text: "Rozpoznany", icon: "ok" },
   unknown: { text: "Nie rozpoznano", icon: "unknown" },
@@ -19,13 +20,15 @@ export const STATUS = {
 export function docsSummary(statuses) {
   const count = (s) => statuses.filter((x) => x === s).length;
   const parts = [];
-  const pending = count("pending");
+  const waiting = count("pending") + count("queued");
   const errors = count("error");
   const unknown = count("unknown");
-  if (pending) parts.push(`przetwarzanie: ${pending}`);
+  // w trakcie przetwarzania: „2 z 5 gotowe”
+  const progress = waiting ? `${statuses.length - waiting} z ${statuses.length} gotowe` : "";
+  if (progress) parts.push(progress);
   if (errors) parts.push(`${errors} ${plural(errors, "błąd", "błędy", "błędów")}`);
   if (unknown) parts.push(`${unknown} ${plural(unknown, "nierozpoznany", "nierozpoznane", "nierozpoznanych")}`);
-  return { count: statuses.length, attention: parts.join(", "), alert: errors > 0 };
+  return { count: statuses.length, attention: parts.join(", "), alert: errors > 0, progress };
 }
 
 /** „16/22 pól” i „1 poprawka” dla prawej strony drugiego paska. */

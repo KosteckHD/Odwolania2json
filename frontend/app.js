@@ -1,4 +1,4 @@
-import { ApiError, extractWithApi, extractWithMock, fetchDocumentTypes } from "./api.js";
+import { extractEach, extractWithApi, extractWithMock, fetchDocumentTypes } from "./api.js";
 import { DOC_TYPES, emptyListItem, getPath, typeLabel } from "./fields.js";
 import { zipStore } from "./zip.js";
 import { buildResultFiles, jsonName, retypeEntry, safeName } from "./export.js";
@@ -324,13 +324,21 @@ el.cancelRetry.addEventListener("click", () => state.abort?.abort());
 el.restoreYes.addEventListener("click", restoreDraft);
 el.restoreNo.addEventListener("click", dropDraft);
 
-const failedPositions = () => (state.results ?? []).flatMap((r, i) => (r.status === "error" ? [i] : []));
+const failedPositions = () => (state.results ?? []).flatMap((r, i) => (r?.status === "error" ? [i] : []));
+
+/** Fokus jest „wolny”, gdy nikt niczego nie edytuje: nie zabieramy go z rubryki ani z panelu. */
+const focusIsFree = () => {
+  const a = document.activeElement;
+  return !a || a === document.body || a.hidden || !a.isConnected || !a.offsetParent
+    || el.actions.contains(a) || a === el.cancelRetry;
+};
 
 /**
- * Wysyła pliki do ekstrakcji. `positions` = null: cała sprawa (wyniki zastępowane),
- * tablica pozycji: tylko te pliki, a ich wpisy trafiają na swoje miejsca; reszta
- * wyników i ręczne poprawki zostają. Anulowanie albo błąd całego żądania
- * przywraca stan sprzed wysyłki.
+ * Wysyła pliki plik po pliku (każdy PDF osobnym POST /api/extract, najwyżej EXTRACT_CONCURRENCY naraz).
+ * `positions` = null: cała sprawa (wyniki zastępowane), tablica pozycji: tylko te pliki, a ich wpisy
+ * trafiają na swoje miejsca; reszta wyników i ręczne poprawki zostają. Każdy wynik jest pokazywany od razu,
+ * błąd jednego pliku nie zatrzymuje pozostałych. Anulowanie przerywa trwające żądania i kolejkę;
+ * gotowe wyniki zostają, a nieprzetworzone pliki dostają status błędu („Ponów błędne”).
  */
 async function runExtraction(positions) {
   if (state.pending) return;
@@ -340,11 +348,14 @@ async function runExtraction(positions) {
     return;
   }
   if (positions && (!state.results || positions.length === 0)) positions = null;
-  const files = positions ? positions.map((i) => state.files[i]) : [...state.files];
-  const before = { results: state.results, meta: state.meta, edits: state.edits };
+  const targets = positions ?? state.files.map((_, i) => i);
+  const files = targets.map((i) => state.files[i]);
+  const before = { results: state.results, meta: state.meta, edits: state.edits, saved: state.saved, selected: state.selected };
   const controller = new AbortController();
+  const fileState = [];
+  targets.forEach((i) => { fileState[i] = "queued"; });
   Object.assign(state, {
-    pending: true, pendingSet: positions ? new Set(positions) : null, abort: controller,
+    pending: true, pendingSet: new Set(targets), abort: controller, fileState,
     slow: false, notice: null, active: null, restore: null,   // przetwarzanie od nowa zamiast przywracania
   });
   if (!positions) Object.assign(state, { results: null, meta: null });
@@ -352,76 +363,94 @@ async function runExtraction(positions) {
   render();
   (positions ? el.cancelRetry : el.cancel).focus();   // przycisk, którym zaczęto, jest teraz zablokowany
 
-  const extract = state.mode === "mock" ? extractWithMock : extractWithApi;
+  const extractOne = state.mode === "mock"
+    ? (file, opts) => extractWithMock([file], { ...opts, delayMs: 650 + Math.round(Math.random() * 500) })
+    : (file, opts) => extractWithApi([file], opts);
   const started = performance.now();
   const slowTimer = setTimeout(() => {
     if (state.abort !== controller) return;
     state.slow = true;
     render({ sheet: false });   // bez przebudowy arkusza: nie zabieramy fokusu z rubryki
   }, 8000);
-  let outcome;
-  try {
-    outcome = await extract(files, { signal: controller.signal });
-    if (controller.signal.aborted) throw new DOMException("Przerwano", "AbortError");
-  } catch (error) {
-    outcome = { error };
-  }
+  let first = !positions;   // pierwszy wynik całej sprawy otwiera ekran wyniku
+  let meta = null;
+
+  const outcome = await extractEach(files, {
+    extractOne,
+    signal: controller.signal,
+    onStart: (k) => {
+      if (state.abort !== controller) return;
+      state.fileState[targets[k]] = "running";
+      render({ sheet: false });
+    },
+    onResult: (k, entry, m) => {
+      if (state.abort !== controller) return;
+      const pos = targets[k];
+      meta ??= m;
+      const free = focusIsFree();
+      delete state.fileState[pos];
+      if (first) {
+        // pierwszy gotowy dokument: ekran wyniku, wcześniejsze poprawki przepadają (jak dotąd przy „Przetwórz ponownie”)
+        first = false;
+        Object.assign(state, { results: state.files.map(() => null), edits: [], saved: [], selected: pos });
+      }
+      state.results[pos] = entry;
+      delete state.edits[pos];
+      delete state.saved[pos];
+      // arkusz przebudowujemy tylko dla dokumentu, który właśnie się otworzył albo jest wybrany
+      render({ sheet: pos === state.selected });
+      if (free && !el.result.hidden && (!document.activeElement || document.activeElement === document.body || !document.activeElement.offsetParent)) el.docsBtn.focus();
+      const sum = docsSummary(state.files.map((_, i) => statusAt(i)));
+      announce(`${entry.filename}: ${entry.status === "ok" ? typeLabel(entry.type) : STATUS[entry.status]?.text ?? entry.status}. ${sum.progress ?? ""}`);
+    },
+  });
   clearTimeout(slowTimer);
   if (state.abort !== controller) return;   // w międzyczasie zaczęto nową sprawę
 
-  const focusWasHere = !document.activeElement || document.activeElement === document.body
-    || el.actions.contains(document.activeElement) || el.cancelRetry === document.activeElement
-    || el.docsPanel.contains(document.activeElement);
-  Object.assign(state, { pending: false, pendingSet: null, abort: null, slow: false });
-  let focusTarget = el.submit;
+  const free = focusIsFree();
+  const seconds = (performance.now() - started) / 1000;
+  Object.assign(state, { pending: false, pendingSet: null, abort: null, slow: false, fileState: [] });
 
-  if (outcome.error) {
-    const { error } = outcome;
-    if (!positions) Object.assign(state, before);
-    if (controller.signal.aborted || error?.name === "AbortError") {
+  if (outcome.aborted && !state.results) {
+    // nic jeszcze nie przyszło: wracamy do stanu sprzed wysyłki
+    Object.assign(state, before);
+    state.notice = {
+      kind: "info", retry: false,
+      text: state.results
+        ? "Przetwarzanie anulowane. Wcześniejsze wyniki i poprawki zostały bez zmian."
+        : "Przetwarzanie anulowane. Pliki zostały na liście, możesz je przetworzyć ponownie.",
+    };
+  } else {
+    let missing = 0;
+    targets.forEach((pos, k) => {
+      if (outcome.documents[k]) return;
+      // przerwane przed wynikiem: przy ponawianiu zostaje poprzedni wpis, przy całej sprawie plik ma błąd do ponowienia
+      if (positions && before.results?.[pos]) { state.results[pos] = before.results[pos]; return; }
+      missing += 1;
+      state.results[pos] = {
+        filename: state.files[pos].name, status: "error", type: null, data: null,
+        error: { code: "cancelled", message: "Przetwarzanie przerwane przed wynikiem." },
+      };
+    });
+    state.meta = positions ? { ...state.meta, ...(meta ?? {}), seconds } : { ...(meta ?? {}), seconds };
+    state.lastRun = null;
+    const done = outcome.documents.filter(Boolean);
+    if (outcome.aborted) {
       state.notice = {
         kind: "info", retry: false,
-        text: positions
-          ? "Ponawianie anulowane. Wyniki i poprawki zostały bez zmian."
-          : state.results
-            ? "Przetwarzanie anulowane. Wcześniejsze wyniki i poprawki zostały bez zmian."
-            : "Przetwarzanie anulowane. Pliki zostały na liście, możesz je przetworzyć ponownie.",
+        text: `Przetwarzanie anulowane: gotowe ${done.length} z ${targets.length}. ${missing ? "Pozostałe pliki przetworzysz przyciskiem „Ponów błędne” w panelu „Dokumenty”." : "Wcześniejsze wyniki zostały bez zmian."}`,
       };
-    } else {
-      const known = error instanceof ApiError;
-      if (!known) console.error(error);
-      const retry = !known || error.kind !== "invalid_request";
-      // „…nie powiodło się. (HTTP 502)” → „…nie powiodło się (HTTP 502).”
-      const text = known ? error.message.replace(/\.?\s*\((HTTP \d+)\)$/, " ($1).") : "Nieoczekiwany błąd aplikacji.";
-      state.notice = {
-        kind: "error", retry,
-        text: retry ? `${text} Pliki${state.results ? ", wyniki i poprawki" : ""} zostały bez zmian.` : text,
-      };
-      state.lastRun = positions;
-      if (retry) focusTarget = el.retryRequest;
+    } else if (done.length && done.every((d) => d.error?.code === "network_error")) {
+      state.notice = { kind: "error", retry: false, text: "Brak połączenia z serwerem. Sprawdź, czy backend działa, i użyj „Ponów błędne” w panelu „Dokumenty”." };
     }
-  } else {
-    const { documents, meta } = outcome;
-    const seconds = (performance.now() - started) / 1000;
-    if (positions) {
-      const results = [...state.results];
-      const edits = [...state.edits];
-      positions.forEach((pos, k) => { results[pos] = documents[k]; delete edits[pos]; delete state.saved[pos]; });
-      Object.assign(state, { results, edits, meta: { ...state.meta, ...meta, seconds } });
-    } else {
-      Object.assign(state, { results: documents, edits: [], saved: [], meta: { ...meta, seconds } });
-      makeRoomForResults();
-      const firstOk = documents.findIndex((r) => r.status === "ok");
-      state.selected = firstOk >= 0 ? firstOk : 0;
-    }
-    state.lastRun = null;
-    announce(`${positions ? "Ponowiono" : "Przetworzono"} ${documents.length} ${plural(documents.length, "plik", "pliki", "plików")}. ${tallyText(documents)}`);
-    focusTarget = el.docsBtn;   // podpis przycisku mówi, ile jest plików i błędów
+    announce(`${positions ? "Ponowiono" : "Przetworzono"} ${done.length} ${plural(done.length, "plik", "pliki", "plików")}. ${tallyText(done)}`);
   }
-  // przy ponawianiu arkusz innego dokumentu zostaje, żeby nie przerywać wpisywania
-  render({ sheet: !positions || positions.includes(state.selected) });
+  // arkusz wybranego dokumentu był już zbudowany, gdy przyszedł jego wynik: przebudowa zabrałaby fokus z rubryki
+  const sheetStale = !state.results || state.selected === null
+    || targets.some((pos, k) => pos === state.selected && !outcome.documents[k]);
+  render({ sheet: sheetStale });
   scheduleDraftSave();
-  if (focusWasHere) ((focusTarget?.offsetParent ? focusTarget : null) ?? (state.results ? el.docsBtn : el.submit)).focus();
+  if (free) ((state.results ? el.docsBtn : el.submit)).focus();
 }
 
 function tallyText(documents) {
@@ -440,7 +469,9 @@ function announce(text) {
 /* ---------- render ---------- */
 
 function statusAt(index) {
-  if (state.pending && (!state.pendingSet || state.pendingSet.has(index))) return "pending";
+  const run = state.pending ? state.fileState?.[index] : null;
+  if (run === "queued") return "queued";
+  if (run === "running") return "pending";
   return state.results?.[index]?.status ?? "selected";
 }
 
@@ -495,9 +526,10 @@ function render({ sheet = true } = {}) {
   el.submit.textContent = state.pending ? "Przetwarzanie…" : `Przetwórz ${n} ${plural(n, "plik", "pliki", "plików")}`;
   el.cancel.hidden = !(state.pending && screen === "intake");
   el.cancelRetry.hidden = !(state.pending && screen === "result");
+  const progress = state.pending ? docsSummary(state.files.map((_, i) => statusAt(i))).progress : "";
   el.note.textContent = !state.pending ? ""
-    : state.slow ? "To trwa dłużej niż zwykle. Model wciąż czyta dokumenty. Możesz poczekać albo anulować."
-    : "System rozpoznaje typ każdego dokumentu po treści i wyciąga dane.";
+    : state.slow ? `${progress}. To trwa dłużej niż zwykle. Model wciąż czyta dokumenty. Możesz poczekać albo anulować.`
+    : `${progress}. Każdy plik jest wysyłany osobno; wynik pojawi się od razu, gdy będzie gotowy.`;
 
   // panel „Dokumenty”: ponawianie i przetwarzanie od nowa
   const failed = state.pending ? 0 : failedPositions().length;
@@ -540,8 +572,8 @@ function renderFileRow(file, index) {
   main.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "file-name", file.name));
   const meta = node("span", "file-meta", formatSize(file.size));
   li.append(pos, main, meta);
-  if (status === "pending") {
-    li.append(statusNode("pending", null, "badge file-state"));
+  if (status === "pending" || status === "queued") {
+    li.append(statusNode(status, null, "badge file-state"));
   } else if (!state.pending) {
     const remove = node("button", "file-remove");
     remove.type = "button";
@@ -715,11 +747,11 @@ function renderSummary() {
     return;
   }
   const byType = new Map();
-  for (const r of state.results) if (r.status === "ok") byType.set(r.type, (byType.get(r.type) ?? 0) + 1);
+  for (const r of state.results) if (r?.status === "ok") byType.set(r.type, (byType.get(r.type) ?? 0) + 1);
   const order = [...Object.keys(DOC_TYPES), ...[...byType.keys()].filter((t) => !DOC_TYPES[t])];
   const rows = order.map((type) => [typeLabel(type), byType.get(type) ?? 0, !byType.get(type)]);
-  const unknown = state.results.filter((r) => r.status === "unknown").length;
-  const errors = state.results.filter((r) => r.status === "error").length;
+  const unknown = state.results.filter((r) => r?.status === "unknown").length;
+  const errors = state.results.filter((r) => r?.status === "error").length;
   if (unknown) rows.push(["Nie rozpoznano", unknown, false]);
   if (errors) rows.push(["Błędy", errors, false]);
   const items = rows.map(([label, count, muted]) => {
@@ -742,8 +774,12 @@ function renderSummary() {
   const zipText = `${files.length} ${plural(files.length, "plik", "pliki", "plików")} JSON`;
   el.downloadZip.disabled = files.length === 0 || state.pending;
   el.downloadZipItem.disabled = el.downloadZip.disabled;
-  el.downloadZip.title = `Pobierz ZIP całej sprawy (${zipText})${unsaved().length ? ". Są niepobrane poprawki." : ""}`;
-  el.downloadZipNote.textContent = files.length ? `${safeName(state.caseName ?? "sprawa")}.zip · ${zipText}` : "brak plików do pobrania";
+  const waiting = state.pending ? state.files.filter((_, i) => ["queued", "pending"].includes(statusAt(i))).length : 0;
+  el.downloadZipNote.textContent = waiting
+    ? `ZIP po zakończeniu: czeka jeszcze ${waiting} ${plural(waiting, "plik", "pliki", "plików")}`
+    : files.length ? `${safeName(state.caseName ?? "sprawa")}.zip · ${zipText}` : "brak plików do pobrania";
+  el.downloadZip.title = waiting ? el.downloadZipNote.textContent
+    : `Pobierz ZIP całej sprawy (${zipText})${unsaved().length ? ". Są niepobrane poprawki." : ""}`;
   const index = state.selected;
   const entry = index !== null ? state.results[index] : null;
   el.downloadJson.disabled = entry?.status !== "ok";
@@ -796,8 +832,8 @@ function renderSheet() {
   title.append(node("span", "sr-only", `${file.name}: `));
 
   let left;
-  if (status === "pending") {
-    title.append(statusNode("pending", entry, "col-status"));
+  if (status === "pending" || status === "queued" || !entry) {
+    title.append(statusNode(status === "queued" ? "queued" : "pending", entry, "col-status"));
     left = node("div", "skeleton");
     for (let i = 0; i < 8; i++) left.append(node("div"));
     left.append(node("p", "sr-only", "Trwa przetwarzanie dokumentu."));
@@ -837,7 +873,7 @@ function renderSheet() {
   const body = node("div", "sheet-body");
   const pane = node("div", "fields-pane");
   pane.append(head);
-  if (state.retypeOpen === index && entry.status === "ok") pane.append(retypePanel(index, entry));
+  if (state.retypeOpen === index && entry?.status === "ok") pane.append(retypePanel(index, entry));
   pane.append(left);
   body.dataset.pdf = String(state.showPdf);
   body.dataset.full = String(state.showPdf && state.pdfFull);

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { STATUS, docsSummary, insertPlacement, positionText, progressText } from "../layout.js";
 
 test("STATUS: każdy status ma tekst i ikonę (status nigdy samym kolorem)", () => {
-  for (const key of ["selected", "pending", "ok", "unknown", "error"]) {
+  for (const key of ["selected", "queued", "pending", "ok", "unknown", "error"]) {
     assert.ok(STATUS[key].text.length > 0, key);
     assert.ok(STATUS[key].icon.length > 0, key);
   }
@@ -13,13 +13,17 @@ test("STATUS: każdy status ma tekst i ikonę (status nigdy samym kolorem)", () 
 });
 
 test("docsSummary: liczba plików i to, co wymaga uwagi, z polską odmianą", () => {
-  assert.deepEqual(docsSummary(["ok", "ok", "ok"]), { count: 3, attention: "", alert: false });
+  assert.deepEqual(docsSummary(["ok", "ok", "ok"]), { count: 3, attention: "", alert: false, progress: "" });
   assert.deepEqual(docsSummary(["ok", "error", "unknown", "ok", "ok"]),
-    { count: 5, attention: "1 błąd, 1 nierozpoznany", alert: true });
+    { count: 5, attention: "1 błąd, 1 nierozpoznany", alert: true, progress: "" });
   assert.equal(docsSummary(["error", "error", "ok"]).attention, "2 błędy");
   assert.equal(docsSummary(Array(5).fill("error")).attention, "5 błędów");
   assert.equal(docsSummary(["unknown", "unknown"]).attention, "2 nierozpoznane");
-  assert.equal(docsSummary(["pending", "ok"]).attention, "przetwarzanie: 1");
+  assert.equal(docsSummary(["pending", "ok"]).attention, "1 z 2 gotowe");
+  // plik po pliku: w kolejce i w trakcie liczą się jako niegotowe
+  const run = docsSummary(["ok", "error", "pending", "queued", "queued"]);
+  assert.equal(run.progress, "2 z 5 gotowe");
+  assert.equal(run.attention, "2 z 5 gotowe, 1 błąd");
   assert.equal(docsSummary(["unknown"]).alert, false);
 });
 
