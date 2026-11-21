@@ -8,6 +8,7 @@ from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from kio_extract.cli import main
 from kio_extract.pdf_reader import extract_pdf
 from kio_extract.providers import chat
+from kio_extract.providers.rate_limit import RequestCoordinator
 
 
 def create_pdf(path: Path, lines: tuple[str, ...] = ()) -> None:
@@ -87,7 +88,7 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
     create_pdf(input_dir / "case1" / "c_wadliwy.pdf", ("To jest transakcja o niepoprawnej odpowiedzi.",))
 
     payment = {"przelew_bankowy": {
-        "data_operacji": "2026-02-03", "kwota": 50.0, "na_rachunek": "000123",
+        "data_operacji": "2026-02-03", "kwota": 50.0, "na_rachunek": "PL00123456789012345678901234",
         "numer_transakcji": None, "tytul": None, "z_rachunku": None,
     }}
     answers = iter([
@@ -128,7 +129,61 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
     assert user["role"] == "user"
     assert "potwierdza wplate" in json.loads(user["content"])["strony"][0]["tekst"]
     assert "a_odwolanie.pdf" not in user["content"]
-    assert json.loads((output_dir / "case1" / "a_odwolanie.json").read_bytes()) == payment
+    expected_payment = {"przelew_bankowy": {**payment["przelew_bankowy"], "na_rachunek": "00123456789012345678901234"}}
+    assert json.loads((output_dir / "case1" / "a_odwolanie.json").read_bytes()) == expected_payment
     assert (output_dir / "case1" / "b_przelew.json").read_bytes() == b""
     assert not (output_dir / "case1" / "c_wadliwy.json").exists()
     assert "invalid_output" in capsys.readouterr().err
+
+
+def test_llm_batch_recovers_from_429_and_saves_every_document(tmp_path, monkeypatch):
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    for index in range(5):
+        create_pdf(input_dir / "case1" / f"{index}.pdf", ("Dokument testowy dla procesu ekstrakcji.",))
+    statuses = iter([429, 200, 200, 429, 200, 200, 200])
+    attempts = []
+
+    class FakeConnection:
+        def __init__(self, host, port, timeout):
+            self.status = next(statuses)
+
+        def request(self, method, path, *, body, headers):
+            attempts.append(self.status)
+
+        def getresponse(self):
+            payload = {"choices": [{"finish_reason": "stop", "message": {"content": '{"typ":"unknown","dane":null}'}}]}
+            return SimpleNamespace(status=self.status, getheader=lambda _: "0", read=lambda: json.dumps(payload).encode())
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(chat, "HTTPConnection", FakeConnection)
+    monkeypatch.setattr(chat, "coordinator", RequestCoordinator())
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:8765/v1")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_REQUEST_INTERVAL_SECONDS", "0")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+    assert main(["--llm", "--input", str(input_dir), "--output", str(output_dir)]) == 0
+    assert attempts == [429, 200, 200, 429, 200, 200, 200]
+    assert len(list(output_dir.rglob("*.json"))) == 5
+
+
+def test_run_report_marks_failures_and_tracks_saved_bytes(tmp_path):
+    import hashlib
+
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    report = tmp_path / "reports" / "run.json"
+    create_pdf(input_dir / "case" / "a.pdf", ("Potwierdzenie wykonania przelewu", "Kwota: 50,00 PLN"))
+    (input_dir / "case" / "b.pdf").write_bytes(b"invalid pdf")
+    old_result = output_dir / "case" / "b.json"
+    old_result.parent.mkdir(parents=True)
+    old_result.write_text('{"old": true}', encoding="utf-8")
+    assert main(["--input", str(input_dir), "--output", str(output_dir), "--report", str(report)]) == 1
+    first, second = json.loads(report.read_bytes())["documents"]
+    assert first["status"] == "ok"
+    assert first["sha256"] == hashlib.sha256((output_dir / first["output"]).read_bytes()).hexdigest()
+    assert second["status"] == "error" and second["code"] == "pdf_read"
+    assert old_result.read_text(encoding="utf-8") == '{"old": true}'

@@ -63,7 +63,7 @@
       "properties": {
         "numer_bzp": {"type": ["string", "null"]},
         "numer_postepowania": {"type": ["string", "null"]},
-        "numer_ted": {"type": ["string", "null"]},
+        "numer_ted": {"type": ["string", "null"], "x-normalizer": "ted"},
         "tytul": {"type": ["string", "null"]}
       }
     }

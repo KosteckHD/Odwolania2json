@@ -15,6 +15,22 @@ def normalize_digits(value: str) -> str | None:
     return value if re.fullmatch(r"[0-9]+", value) else None
 
 
+def normalize_polish_bank_account(value: str) -> str:
+    compact = "".join(value.split()).upper()
+    if re.fullmatch(r"PL[0-9]{26}", compact):
+        return compact[2:]
+    if re.fullmatch(r"[0-9]{26}", compact):
+        return compact
+    return value
+
+
+def normalize_ted(value: str) -> str:
+    match = re.fullmatch(r"\s*([0-9]{4})\s*[/\-]\s*[Ss]\s*[0-9]{1,3}\s*-\s*([0-9]{6})\s*", value)
+    if match:
+        return f"{match.group(2)}-{match.group(1)}"
+    return value
+
+
 def normalize_date(value: str) -> str | None:
     value = value.strip()
     match = re.fullmatch(r"([0-9]{1,2})([./-])([0-9]{1,2})\2([0-9]{4})", value)

@@ -71,7 +71,7 @@ class Extractor(Protocol):
 
 
 class OCR(Protocol):
-    def __call__(self, source_path: Path, page_number: int) -> str: ...
+    def __call__(self, source_path: Path, page_number: int) -> str | None: ...
 
 
 class DocumentError(Exception):

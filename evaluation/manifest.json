@@ -1,0 +1,1180 @@
+{
+  "documents": [
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_01/odwolanie.json",
+      "reference": "przyklad_01/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_01/pelnomocnictwo.json",
+      "reference": "przyklad_01/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_01/potwierdzenie_przelewu.json",
+      "reference": "przyklad_01/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_02/odwolanie.json",
+      "reference": "przyklad_02/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_02/pelnomocnictwo.json",
+      "reference": "przyklad_02/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_02/potwierdzenie_przelewu.json",
+      "reference": "przyklad_02/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_03/odwolanie.json",
+      "reference": "przyklad_03/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_03/pelnomocnictwo.json",
+      "reference": "przyklad_03/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_03/potwierdzenie_przelewu.json",
+      "reference": "przyklad_03/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "prediction": "przyklad_04/2025_S 112-383751.json",
+      "sha256": "eb7d9d0a25819ae260b8bb04642a777be19a8e9beb35999c3f28f68981f5b380"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_04/odwolanie.json",
+      "reference": "przyklad_04/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_04/pelnomocnictwo.json",
+      "reference": "przyklad_04/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_04/potwierdzenie_przelewu.json",
+      "reference": "przyklad_04/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_05/odwolanie.json",
+      "reference": "przyklad_05/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_05/pelnomocnictwo.json",
+      "reference": "przyklad_05/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_05/potwierdzenie_przelewu.json",
+      "reference": "przyklad_05/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_06/odwolanie.json",
+      "reference": "przyklad_06/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_06/pelnomocnictwo.json",
+      "reference": "przyklad_06/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_06/potwierdzenie_przelewu.json",
+      "reference": "przyklad_06/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_07/odwolanie.json",
+      "reference": "przyklad_07/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_07/pelnomocnictwo.json",
+      "reference": "przyklad_07/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_07/potwierdzenie_przelewu.json",
+      "reference": "przyklad_07/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_08/odwolanie.json",
+      "reference": "przyklad_08/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_08/pelnomocnictwo.json",
+      "reference": "przyklad_08/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_08/potwierdzenie_przelewu.json",
+      "reference": "przyklad_08/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_09/odwolanie.json",
+      "reference": "przyklad_09/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_09/pelnomocnictwo.json",
+      "reference": "przyklad_09/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_09/potwierdzenie_przelewu.json",
+      "reference": "przyklad_09/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "prediction": "przyklad_10/2025-OJS107-00364525-pl-ts.json",
+      "sha256": "c9f874f28ee7575beaffb34343d64a956553deab96e448226d5c067a16191fa3"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_10/odwolanie.json",
+      "reference": "przyklad_10/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_10/pelnomocnictwo.json",
+      "reference": "przyklad_10/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_10/potwierdzenie_przelewu.json",
+      "reference": "przyklad_10/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_11/odwolanie.json",
+      "reference": "przyklad_11/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_11/pelnomocnictwo.json",
+      "reference": "przyklad_11/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_11/potwierdzenie_przelewu.json",
+      "reference": "przyklad_11/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_12/odwolanie.json",
+      "reference": "przyklad_12/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_12/pelnomocnictwo.json",
+      "reference": "przyklad_12/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_12/potwierdzenie_przelewu.json",
+      "reference": "przyklad_12/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_13/odwolanie.json",
+      "reference": "przyklad_13/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_13/pelnomocnictwo.json",
+      "reference": "przyklad_13/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_13/potwierdzenie_przelewu.json",
+      "reference": "przyklad_13/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_14/odwolanie.json",
+      "reference": "przyklad_14/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_14/pelnomocnictwo.json",
+      "reference": "przyklad_14/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_14/potwierdzenie_przelewu.json",
+      "reference": "przyklad_14/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_15/odwolanie.json",
+      "reference": "przyklad_15/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_15/pelnomocnictwo.json",
+      "reference": "przyklad_15/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_15/potwierdzenie_przelewu.json",
+      "reference": "przyklad_15/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_16/odwolanie.json",
+      "reference": "przyklad_16/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_16/pelnomocnictwo.json",
+      "reference": "przyklad_16/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_16/potwierdzenie_przelewu.json",
+      "reference": "przyklad_16/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_17/odwolanie.json",
+      "reference": "przyklad_17/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_17/pelnomocnictwo.json",
+      "reference": "przyklad_17/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_17/potwierdzenie_przelewu.json",
+      "reference": "przyklad_17/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_18/odwolanie.json",
+      "reference": "przyklad_18/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_18/pelnomocnictwo.json",
+      "reference": "przyklad_18/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_18/potwierdzenie_przelewu.json",
+      "reference": "przyklad_18/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_19/odwolanie.json",
+      "reference": "przyklad_19/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_19/pelnomocnictwo.json",
+      "reference": "przyklad_19/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_19/potwierdzenie_przelewu.json",
+      "reference": "przyklad_19/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_20/odwolanie.json",
+      "reference": "przyklad_20/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_20/pelnomocnictwo.json",
+      "reference": "przyklad_20/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_20/potwierdzenie_przelewu.json",
+      "reference": "przyklad_20/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_21/odwolanie.json",
+      "reference": "przyklad_21/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_21/pelnomocnictwo.json",
+      "reference": "przyklad_21/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_21/potwierdzenie_przelewu.json",
+      "reference": "przyklad_21/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_22/odwolanie.json",
+      "reference": "przyklad_22/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_22/pelnomocnictwo.json",
+      "reference": "przyklad_22/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_22/potwierdzenie_przelewu.json",
+      "reference": "przyklad_22/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_23/odwolanie.json",
+      "reference": "przyklad_23/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_23/pelnomocnictwo.json",
+      "reference": "przyklad_23/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_23/potwierdzenie_przelewu.json",
+      "reference": "przyklad_23/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_24/odwolanie.json",
+      "reference": "przyklad_24/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_24/pelnomocnictwo.json",
+      "reference": "przyklad_24/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_24/potwierdzenie_przelewu.json",
+      "reference": "przyklad_24/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "prediction": "przyklad_24/prowadzenie_postepowania_odwolawczego.json",
+      "sha256": "14cdc52d8f84b9eac1c70e4bdb5f8a838edb61e6acd79a19185282b4c88d28fb"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_25/odwolanie.json",
+      "reference": "przyklad_25/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_25/pelnomocnictwo.json",
+      "reference": "przyklad_25/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_25/potwierdzenie_przelewu.json",
+      "reference": "przyklad_25/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_26/odwolanie.json",
+      "reference": "przyklad_26/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_26/pelnomocnictwo.json",
+      "reference": "przyklad_26/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_26/potwierdzenie_przelewu.json",
+      "reference": "przyklad_26/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_27/odwolanie.json",
+      "reference": "przyklad_27/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_27/pelnomocnictwo.json",
+      "reference": "przyklad_27/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_27/potwierdzenie_przelewu.json",
+      "reference": "przyklad_27/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_28/odwolanie.json",
+      "reference": "przyklad_28/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_28/pelnomocnictwo.json",
+      "reference": "przyklad_28/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_28/potwierdzenie_przelewu.json",
+      "reference": "przyklad_28/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_29/odwolanie.json",
+      "reference": "przyklad_29/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_29/pelnomocnictwo.json",
+      "reference": "przyklad_29/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_29/potwierdzenie_przelewu.json",
+      "reference": "przyklad_29/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_30/odwolanie.json",
+      "reference": "przyklad_30/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_30/pelnomocnictwo.json",
+      "reference": "przyklad_30/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_30/potwierdzenie_przelewu.json",
+      "reference": "przyklad_30/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_31/odwolanie.json",
+      "reference": "przyklad_31/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_31/pelnomocnictwo.json",
+      "reference": "przyklad_31/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_31/potwierdzenie_przelewu.json",
+      "reference": "przyklad_31/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_32/odwolanie.json",
+      "reference": "przyklad_32/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_32/pelnomocnictwo.json",
+      "reference": "przyklad_32/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_32/potwierdzenie_przelewu.json",
+      "reference": "przyklad_32/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_33/odwolanie.json",
+      "reference": "przyklad_33/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_33/pelnomocnictwo.json",
+      "reference": "przyklad_33/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_33/potwierdzenie_przelewu.json",
+      "reference": "przyklad_33/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_34/odwolanie.json",
+      "reference": "przyklad_34/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_34/pelnomocnictwo.json",
+      "reference": "przyklad_34/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_34/potwierdzenie_przelewu.json",
+      "reference": "przyklad_34/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_35/odwolanie.json",
+      "reference": "przyklad_35/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_35/pelnomocnictwo.json",
+      "reference": "przyklad_35/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_35/potwierdzenie_przelewu.json",
+      "reference": "przyklad_35/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_36/odwolanie.json",
+      "reference": "przyklad_36/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_36/pelnomocnictwo.json",
+      "reference": "przyklad_36/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_36/potwierdzenie_przelewu.json",
+      "reference": "przyklad_36/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "prediction": "przyklad_37/2025_BZP 00143067_01.json",
+      "sha256": "e83ef1275467b152cf95bc51fa860794b3f6aaa3e818ea976fd7e1cc2880e4f7"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_37/odwolanie.json",
+      "reference": "przyklad_37/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_37/pelnomocnictwo.json",
+      "reference": "przyklad_37/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_37/potwierdzenie_przelewu.json",
+      "reference": "przyklad_37/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_38/odwolanie.json",
+      "reference": "przyklad_38/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_38/pelnomocnictwo.json",
+      "reference": "przyklad_38/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_38/potwierdzenie_przelewu.json",
+      "reference": "przyklad_38/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_39/odwolanie.json",
+      "reference": "przyklad_39/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_39/pelnomocnictwo.json",
+      "reference": "przyklad_39/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_39/potwierdzenie_przelewu.json",
+      "reference": "przyklad_39/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_40/odwolanie.json",
+      "reference": "przyklad_40/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_40/pelnomocnictwo.json",
+      "reference": "przyklad_40/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_40/potwierdzenie_przelewu.json",
+      "reference": "przyklad_40/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_41/odwolanie.json",
+      "reference": "przyklad_41/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_41/pelnomocnictwo.json",
+      "reference": "przyklad_41/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_41/potwierdzenie_przelewu.json",
+      "reference": "przyklad_41/przelew.json"
+    },
+    {
+      "split": "development",
+      "type": "odwolanie",
+      "prediction": "przyklad_42/odwolanie.json",
+      "reference": "przyklad_42/odwolanie.json"
+    },
+    {
+      "split": "development",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_42/pelnomocnictwo.json",
+      "reference": "przyklad_42/pelnomocnictwo.json"
+    },
+    {
+      "split": "development",
+      "type": "przelew",
+      "prediction": "przyklad_42/potwierdzenie_przelewu.json",
+      "reference": "przyklad_42/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_43/odwolanie.json",
+      "reference": "przyklad_43/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_43/pelnomocnictwo.json",
+      "reference": "przyklad_43/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_43/potwierdzenie_przelewu.json",
+      "reference": "przyklad_43/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_44/odwolanie.json",
+      "reference": "przyklad_44/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_44/pelnomocnictwo.json",
+      "reference": "przyklad_44/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_44/potwierdzenie_przelewu.json",
+      "reference": "przyklad_44/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_45/odwolanie.json",
+      "reference": "przyklad_45/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_45/pelnomocnictwo.json",
+      "reference": "przyklad_45/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_45/potwierdzenie_przelewu.json",
+      "reference": "przyklad_45/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_46/odwolanie.json",
+      "reference": "przyklad_46/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_46/pelnomocnictwo.json",
+      "reference": "przyklad_46/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_46/potwierdzenie_przelewu.json",
+      "reference": "przyklad_46/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_47/odwolanie.json",
+      "reference": "przyklad_47/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_47/pelnomocnictwo.json",
+      "reference": "przyklad_47/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_47/potwierdzenie_przelewu.json",
+      "reference": "przyklad_47/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_48/odwolanie.json",
+      "reference": "przyklad_48/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_48/pelnomocnictwo.json",
+      "reference": "przyklad_48/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_48/potwierdzenie_przelewu.json",
+      "reference": "przyklad_48/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_49/odwolanie.json",
+      "reference": "przyklad_49/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_49/pelnomocnictwo.json",
+      "reference": "przyklad_49/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_49/potwierdzenie_przelewu.json",
+      "reference": "przyklad_49/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_50/odwolanie.json",
+      "reference": "przyklad_50/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_50/pelnomocnictwo.json",
+      "reference": "przyklad_50/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_50/potwierdzenie_przelewu.json",
+      "reference": "przyklad_50/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_51/odwolanie.json",
+      "reference": "przyklad_51/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_51/pelnomocnictwo.json",
+      "reference": "przyklad_51/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_51/potwierdzenie_przelewu.json",
+      "reference": "przyklad_51/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_52/odwolanie.json",
+      "reference": "przyklad_52/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_52/pelnomocnictwo.json",
+      "reference": "przyklad_52/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_52/potwierdzenie_przelewu.json",
+      "reference": "przyklad_52/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_53/odwolanie.json",
+      "reference": "przyklad_53/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_53/pelnomocnictwo.json",
+      "reference": "przyklad_53/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_53/potwierdzenie_przelewu.json",
+      "reference": "przyklad_53/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "odwolanie",
+      "prediction": "przyklad_54/odwolanie.json",
+      "reference": "przyklad_54/odwolanie.json"
+    },
+    {
+      "split": "validation",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_54/pelnomocnictwo.json",
+      "reference": "przyklad_54/pelnomocnictwo.json"
+    },
+    {
+      "split": "validation",
+      "type": "przelew",
+      "prediction": "przyklad_54/potwierdzenie_przelewu.json",
+      "reference": "przyklad_54/przelew.json"
+    },
+    {
+      "split": "test",
+      "type": "odwolanie",
+      "prediction": "przyklad_55/odwolanie.json",
+      "reference": "przyklad_55/odwolanie.json"
+    },
+    {
+      "split": "test",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_55/pelnomocnictwo.json",
+      "reference": "przyklad_55/pelnomocnictwo.json"
+    },
+    {
+      "split": "test",
+      "type": "przelew",
+      "prediction": "przyklad_55/potwierdzenie_przelewu.json",
+      "reference": "przyklad_55/przelew.json"
+    },
+    {
+      "split": "test",
+      "type": "odwolanie",
+      "prediction": "przyklad_56/odwolanie.json",
+      "reference": "przyklad_56/odwolanie.json"
+    },
+    {
+      "split": "test",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_56/pelnomocnictwo.json",
+      "reference": "przyklad_56/pelnomocnictwo.json"
+    },
+    {
+      "split": "test",
+      "type": "przelew",
+      "prediction": "przyklad_56/potwierdzenie_przelewu.json",
+      "reference": "przyklad_56/przelew.json"
+    },
+    {
+      "split": "test",
+      "type": "odwolanie",
+      "prediction": "przyklad_57/odwolanie.json",
+      "reference": "przyklad_57/odwolanie.json"
+    },
+    {
+      "split": "test",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_57/pelnomocnictwo.json",
+      "reference": "przyklad_57/pelnomocnictwo.json"
+    },
+    {
+      "split": "test",
+      "type": "przelew",
+      "prediction": "przyklad_57/potwierdzenie_przelewu.json",
+      "reference": "przyklad_57/przelew.json"
+    },
+    {
+      "split": "test",
+      "type": "odwolanie",
+      "prediction": "przyklad_58/odwolanie.json",
+      "reference": "przyklad_58/odwolanie.json"
+    },
+    {
+      "split": "test",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_58/pelnomocnictwo.json",
+      "reference": "przyklad_58/pelnomocnictwo.json"
+    },
+    {
+      "split": "test",
+      "type": "przelew",
+      "prediction": "przyklad_58/potwierdzenie_przelewu.json",
+      "reference": "przyklad_58/przelew.json"
+    },
+    {
+      "split": "test",
+      "type": "odwolanie",
+      "prediction": "przyklad_59/odwolanie.json",
+      "reference": "przyklad_59/odwolanie.json"
+    },
+    {
+      "split": "test",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_59/pelnomocnictwo.json",
+      "reference": "przyklad_59/pelnomocnictwo.json"
+    },
+    {
+      "split": "test",
+      "type": "przelew",
+      "prediction": "przyklad_59/potwierdzenie_przelewu.json",
+      "reference": "przyklad_59/przelew.json"
+    },
+    {
+      "split": "test",
+      "type": "odwolanie",
+      "prediction": "przyklad_60/odwolanie.json",
+      "reference": "przyklad_60/odwolanie.json"
+    },
+    {
+      "split": "test",
+      "type": "pelnomocnictwo",
+      "prediction": "przyklad_60/pelnomocnictwo.json",
+      "reference": "przyklad_60/pelnomocnictwo.json"
+    },
+    {
+      "split": "test",
+      "type": "przelew",
+      "prediction": "przyklad_60/potwierdzenie_przelewu.json",
+      "reference": "przyklad_60/przelew.json"
+    },
+    {
+      "split": "validation",
+      "type": "unknown",
+      "sha256": "648cb112f22ddad663ca6e882c0341c7d987e98878ec477954ac819594df69d7",
+      "prediction": "negatywne/1648041143_1647951357decyzja-ministrasportu-pzn.json"
+    },
+    {
+      "split": "validation",
+      "type": "unknown",
+      "sha256": "a0bd9f6392ed01def9749c560120e1019aed5f1a7512c67c5218419dfa863903",
+      "prediction": "negatywne/16_komisja_ds._regulacji_wynagrodzeń.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "sha256": "14cdc52d8f84b9eac1c70e4bdb5f8a838edb61e6acd79a19185282b4c88d28fb",
+      "prediction": "negatywne/2020_03_21-22prowadzenie_postepowania_odwolawczego.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "sha256": "c9f874f28ee7575beaffb34343d64a956553deab96e448226d5c067a16191fa3",
+      "prediction": "negatywne/2025-OJS107-00364525-pl-ts-1.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "sha256": "c9f874f28ee7575beaffb34343d64a956553deab96e448226d5c067a16191fa3",
+      "prediction": "negatywne/2025-OJS107-00364525-pl-ts.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "sha256": "e83ef1275467b152cf95bc51fa860794b3f6aaa3e818ea976fd7e1cc2880e4f7",
+      "prediction": "negatywne/2025_BZP 00143067_01.json"
+    },
+    {
+      "split": "development",
+      "type": "unknown",
+      "sha256": "eb7d9d0a25819ae260b8bb04642a777be19a8e9beb35999c3f28f68981f5b380",
+      "prediction": "negatywne/2025_S 112-383751.json"
+    },
+    {
+      "split": "validation",
+      "type": "unknown",
+      "sha256": "9a92a0197874faa60526bd7b3604b336fcd2123adfb7b7af1b89f86e995a6739",
+      "prediction": "negatywne/2025_S 188-641009.json"
+    },
+    {
+      "split": "validation",
+      "type": "unknown",
+      "sha256": "086447c9a45d5b493a5d6b2ed53e2465448fc13e2a87ec07b57e013b1f48e618",
+      "prediction": "negatywne/Broszura_JPK_FA(2).json"
+    },
+    {
+      "split": "validation",
+      "type": "unknown",
+      "sha256": "f5a12de5efe7356ce9927138a9966556aa387d213bf6ec00e68694a4824ec088",
+      "prediction": "negatywne/Decyzja-Ministra-Sportu-i-Turystyki1.json"
+    },
+    {
+      "split": "validation",
+      "type": "unknown",
+      "sha256": "cd129ef691812129eb8e45ee403f77b8bf6b19a6d82bf3d33038648aa69ac0f3",
+      "prediction": "negatywne/KIO_KIO 2617-21.json"
+    },
+    {
+      "split": "validation",
+      "type": "unknown",
+      "sha256": "8b1a16777fed9377dc1dc12c5eada52bb22ba7f2ad833eca099326038c0f0968",
+      "prediction": "negatywne/Minister-Sprawiedliwosci-pismo-RDSSP-z-11.03.2024-r..json"
+    }
+  ]
+}

@@ -11,10 +11,10 @@
       "properties": {
         "data_operacji": {"type": ["string", "null"], "format": "date"},
         "kwota": {"type": ["number", "null"]},
-        "na_rachunek": {"type": ["string", "null"]},
+        "na_rachunek": {"type": ["string", "null"], "x-normalizer": "polish_bank_account"},
         "numer_transakcji": {"type": ["string", "null"]},
         "tytul": {"type": ["string", "null"]},
-        "z_rachunku": {"type": ["string", "null"]}
+        "z_rachunku": {"type": ["string", "null"], "x-normalizer": "polish_bank_account"}
       }
     }
   }
