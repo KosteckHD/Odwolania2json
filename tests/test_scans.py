@@ -90,6 +90,25 @@ def test_scan_is_transcribed_by_model_then_extracted_from_text(tmp_path):
     assert all(item.method.startswith("ocr+") for item in evidence)
 
 
+def test_failed_page_transcription_keeps_other_pages(tmp_path):
+    scan = tmp_path / "scan.pdf"
+    create_scan(scan, pages=2)
+    client = FakeClient(answer={"typ": "przelew", "dane": payment()})
+    original = client.transcribe_image
+
+    def flaky(*, instructions, image):
+        if len(client.transcribed) == 1:
+            client.transcribed.append(image)
+            raise DocumentError("llm_rate_limit", "test")
+        return original(instructions=instructions, image=image)
+
+    client.transcribe_image = flaky
+    classification, _ = processor(client).process(scan)
+    assert classification.doc_type == "przelew"
+    pages, _ = client.requests[0]
+    assert sum(bool(page["tekst"]) for page in pages["strony"]) == 1
+
+
 def test_scan_images_go_straight_to_extraction_in_image_mode(tmp_path):
     scan = tmp_path / "scan.pdf"
     create_scan(scan, pages=2)
@@ -152,7 +171,8 @@ def test_cli_writes_file_for_every_pdf_when_model_is_unreachable(tmp_path, monke
     assert json.loads((output_dir / "skan.json").read_bytes()) == {}
     entries = {entry["source"]: entry for entry in json.loads(report.read_bytes())["documents"]}
     assert entries["przelew.pdf"]["fallback"] == "llm_connect"
-    assert entries["skan.pdf"]["written"] == "negative"   # OCR modelem zawiódł, tekstu brak
+    # OCR modelem zawiódł, tekstu brak: {} i pierwotny kod błędu modelu w raporcie
+    assert entries["skan.pdf"]["written"] == "negative" and entries["skan.pdf"]["code"] == "llm_connect"
     assert "awaryjne=2" in capsys.readouterr().out
 
 

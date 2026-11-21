@@ -85,6 +85,18 @@ def test_exponential_backoff_and_non_429_errors(monkeypatch):
     assert error.value.code == "llm_http" and len(calls) == 1
 
 
+def test_transient_server_errors_are_retried_then_reported(monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(rate_limit, "time", clock)
+    factory, calls = connections([503, 502, 200])
+    assert RequestCoordinator().post(factory, "host", None, "/", b"", {}, RateLimitSettings(0, 4, 10)) == b"{}"
+    assert clock.waits == [2, 4] and len(calls) == 3
+    factory, calls = connections([500, 500, 500, 500, 500])
+    with pytest.raises(DocumentError) as error:
+        RequestCoordinator().post(factory, "host", None, "/", b"", {}, RateLimitSettings(0, 4, 10))
+    assert error.value.code == "llm_http" and len(calls) == 4
+
+
 def test_retry_after_date_and_invalid_settings(monkeypatch):
     header = format_datetime(datetime.now(timezone.utc) + timedelta(seconds=30), usegmt=True)
     assert 28 <= retry_after_seconds(header) <= 30

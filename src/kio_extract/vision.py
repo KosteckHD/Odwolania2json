@@ -128,7 +128,10 @@ def transcribe_pages(client, images: list[tuple[int, bytes]], workers: int) -> d
         number, image = item
         if tracks_usage:
             client.last_usage = None
-        text = client.transcribe_image(instructions=TRANSCRIBE_INSTRUCTIONS, image=image)
+        try:
+            text = client.transcribe_image(instructions=TRANSCRIBE_INSTRUCTIONS, image=image)
+        except DocumentError as exc:
+            text = exc   # jedna nieudana strona nie przekreśla pozostałych
         return number, text, (client.last_usage or {}) if tracks_usage else {}
 
     if len(images) <= 1:
@@ -142,4 +145,8 @@ def transcribe_pages(client, images: list[tuple[int, bytes]], workers: int) -> d
             for key, value in usage.items():
                 caller_usage[key] = caller_usage.get(key, 0) + value
         client.last_usage = caller_usage or None
-    return {number: text for number, text, _ in results}
+    texts = {number: text for number, text, _ in results if isinstance(text, str)}
+    failures = [text for _, text, _ in results if isinstance(text, DocumentError)]
+    if failures and not texts:
+        raise failures[0]
+    return texts

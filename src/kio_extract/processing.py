@@ -118,7 +118,11 @@ class DocumentProcessor:
             if exc.code not in FALLBACK_CODES:
                 raise
             # wynik awaryjny: klasyfikacja i ekstrakcja regułowa z YAML na tekście, który mamy
-            self._require_text(document)
+            try:
+                self._require_text(document)
+            except DocumentError as missing:
+                # skan, którego model nie odczytał: zgłaszamy pierwotny błąd modelu (CLI zapisze {})
+                raise DocumentError(exc.code, f"{exc} (skan bez tekstu do wyniku awaryjnego)") from missing
             classification, data, evidence = self._rules(document)
             classification = ClassificationResult(classification.doc_type, f"fallback:{exc.code}")
             return self._finish(document, classification, data, evidence, from_llm=False)
