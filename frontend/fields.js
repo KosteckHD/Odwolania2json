@@ -12,6 +12,9 @@
 //   bool    – 1/0 jako kratki „tak / nie”
 //   enum    – wartość ze słownika (labels)
 //   names   – lista obiektów { imie_nazwisko }
+//
+// `hint` to krótka podpowiedź przy etykiecie. UZP chce imion i nazwisk w mianowniku
+// („Mateusz Szymański”, nie „Mateusza Szymańskiego”), a w pismach bywają odmienione.
 
 export const DOC_TYPES = {
   odwolanie: {
@@ -38,7 +41,7 @@ export const DOC_TYPES = {
           { key: "nip", label: "NIP", kind: "digits" },
           { key: "regon", label: "REGON", kind: "digits" },
           { key: "przez-pelnomocnika", label: "Działa przez pełnomocnika", kind: "bool" },
-          { key: "pelnomocnik.imie_nazwisko", label: "Pełnomocnik: imię i nazwisko", kind: "text" },
+          { key: "pelnomocnik.imie_nazwisko", label: "Pełnomocnik: imię i nazwisko", kind: "text", hint: "w mianowniku" },
           { key: "pelnomocnik.nazwa", label: "Pełnomocnik: kancelaria", kind: "text" },
           { key: "pelnomocnik.mail", label: "Pełnomocnik: e-mail", kind: "text" },
         ],
@@ -78,10 +81,10 @@ export const DOC_TYPES = {
         fields: [
           { key: "data.nazwa", label: "Nazwa", kind: "text", wide: true },
           { key: "data.typ", label: "Rodzaj podmiotu", kind: "enum", labels: { osoba_prawna: "Osoba prawna", osoba_fizyczna: "Osoba fizyczna" } },
-          { key: "data.imie_nazwisko", label: "Imię i nazwisko (osoba fizyczna)", kind: "text" },
+          { key: "data.imie_nazwisko", label: "Imię i nazwisko osoby fizycznej", kind: "text", hint: "w mianowniku" },
           { key: "data.krs", label: "Numer KRS", kind: "digits" },
           { key: "data.nip", label: "NIP", kind: "digits" },
-          { key: "podpisujacy", label: "Osoby podpisujące", kind: "names", wide: true },
+          { key: "podpisujacy", label: "Osoby podpisujące", kind: "names", wide: true, hint: "w mianowniku" },
         ],
       },
       {
@@ -89,7 +92,7 @@ export const DOC_TYPES = {
         path: "pelnomocnicy",
         list: true,
         fields: [
-          { key: "imie_nazwisko", label: "Imię i nazwisko", kind: "text" },
+          { key: "imie_nazwisko", label: "Imię i nazwisko", kind: "text", hint: "w mianowniku" },
           { key: "pesel", label: "PESEL", kind: "digits", integer: true },
         ],
       },

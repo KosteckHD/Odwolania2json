@@ -94,7 +94,44 @@ def test_api_with_local_fake_llm_and_real_pdf(tmp_path):
         assert set(result["data"]["przelew_bankowy"]) == {
             "data_operacji", "kwota", "na_rachunek", "numer_transakcji", "tytul", "z_rachunku"
         }
+        assert response.json()["meta"] == {"model": "fixture"}
     finally:
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_panel_is_served_next_to_api():
+    client = TestClient(create_app(FakeProcessor()))
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "text/html" in page.headers["content-type"]
+    assert page.content == (Path(__file__).resolve().parents[1] / "frontend/index.html").read_bytes()
+    assert client.get("/api.js").status_code == 200
+    response = client.post("/api/extract", files=[("files", ("a.pdf", io.BytesIO(b"ok"), "application/pdf"))])
+    assert response.status_code == 200
+    assert response.json()["documents"][0]["status"] == "ok"
+
+
+def test_api_works_without_panel_directory(tmp_path):
+    client = TestClient(create_app(FakeProcessor(), frontend_dir=tmp_path / "missing"))
+    assert client.get("/").status_code == 404
+    response = client.post("/api/extract", files=[("files", ("a.pdf", io.BytesIO(b"ok"), "application/pdf"))])
+    assert response.status_code == 200
+
+
+def test_meta_model_is_empty_without_llm():
+    response = TestClient(create_app(FakeProcessor())).post(
+        "/api/extract", files=[("files", ("a.pdf", io.BytesIO(b"ok"), "application/pdf"))])
+    assert response.json()["meta"] == {"model": None}
+
+
+def test_document_types_list_configured_schemas():
+    root = Path(__file__).resolve().parents[1]
+    processor = DocumentProcessor(load_configs(root / "configs/documents", root / "schemas"), root / "prompts/system_pl.md")
+    response = TestClient(create_app(processor)).get("/api/document-types")
+    assert response.status_code == 200
+    types = {entry["doc_type"]: entry["fields"] for entry in response.json()["types"]}
+    assert set(types) == {"odwolanie", "pelnomocnictwo", "przelew"}
+    assert "przelew_bankowy.kwota" in types["przelew"]
+    assert any(path.startswith("Odwolujacy[].") for path in types["odwolanie"])

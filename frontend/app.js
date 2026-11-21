@@ -3,6 +3,10 @@ import { DOC_TYPES, getPath, typeLabel } from "./fields.js";
 import { zipStore } from "./zip.js";
 import { createPdfViewer } from "./pdfview.js";
 import { expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
+import {
+  DRAFT_STORAGE_KEY, alignDraft, buildDraft, caseKey, countChanges, describeDraft, findDraft,
+  parseStore, plural, putDraft, unsavedPositions,
+} from "./draft.js";
 
 const STATUS_TEXT = {
   selected: "Czeka na przetworzenie",
@@ -30,9 +34,13 @@ const state = {
   types: null,        // lista typów do widoku „Typy dokumentów”
   edits: [],          // dane po ręcznych poprawkach (po pozycji); brak = bez zmian
   active: null,       // rubryka z ostatnim fokusem: { index, path, field, apply(text) }
+  saved: [],          // JSON danych z chwili ostatniego pobrania (po pozycji): do ostrzeżenia przed wyjściem
+  restore: null,      // kopia robocza tej samej sprawy z pamięci przeglądarki, czeka na decyzję
+  docsCollapsed: false,
 };
 
 const viewers = new WeakMap(); // File → podgląd PDF (renderowany raz)
+let draftWritten = false;      // w tej sesji zapisano kopię roboczą bieżącej sprawy
 
 function readPref(key, fallback) {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
@@ -88,6 +96,9 @@ const el = {
   tally: $("tally"), sheet: $("sheet"), work: document.querySelector(".work"),
   summary: $("summary"), downloadAll: $("download-all"), downloadAllLabel: $("download-all-label"),
   typesList: $("types-list"), typesSource: $("types-source"),
+  docs: $("docs"), docsToggle: $("docs-toggle"), docsToggleLabel: $("docs-toggle-label"), docsMini: $("docs-mini"),
+  restoreBox: $("restore-box"), restoreText: $("restore-text"), restoreYes: $("restore-yes"), restoreNo: $("restore-no"),
+  unsavedNote: $("unsaved-note"),
 };
 
 /* ---------- nawigacja ---------- */
@@ -154,8 +165,9 @@ function resetCase() {
   Object.assign(state, {
     caseName: null, files: [], urls: [], results: null, meta: null,
     notice: null, lastRun: null, selected: null, pending: false, pendingSet: null, abort: null, slow: false,
-    edits: [], active: null,
+    edits: [], active: null, saved: [], restore: null,
   });
+  draftWritten = false;
   el.input.value = "";
   el.folderInput.value = "";
 }
@@ -211,6 +223,7 @@ function addFiles(fileList, caseName = null) {
     : pdfs.length === 0 ? "W wybranym folderze nie ma plików PDF." : null;
   state.notice = problem ? { kind: "error", text: problem, retry: false } : null;
   if (state.selected === null && state.files.length) state.selected = 0;
+  checkRestore();
   render();
 }
 
@@ -252,6 +265,7 @@ function removeFile(index) {
     if (state.files.length === 0) state.selected = null;
     else if (state.selected >= state.files.length) state.selected = state.files.length - 1;
   }
+  checkRestore();
   render();
 }
 
@@ -275,6 +289,9 @@ el.retryFailed.addEventListener("click", () => runExtraction(failedPositions()))
 el.retryRequest.addEventListener("click", () => runExtraction(state.lastRun));
 el.cancel.addEventListener("click", () => state.abort?.abort());
 
+el.restoreYes.addEventListener("click", restoreDraft);
+el.restoreNo.addEventListener("click", dropDraft);
+
 const failedPositions = () => (state.results ?? []).flatMap((r, i) => (r.status === "error" ? [i] : []));
 
 /**
@@ -296,7 +313,7 @@ async function runExtraction(positions) {
   const controller = new AbortController();
   Object.assign(state, {
     pending: true, pendingSet: positions ? new Set(positions) : null, abort: controller,
-    slow: false, notice: null, active: null,
+    slow: false, notice: null, active: null, restore: null,   // przetwarzanie od nowa zamiast przywracania
   });
   if (!positions) Object.assign(state, { results: null, meta: null });
   hideInsertButton();
@@ -356,10 +373,10 @@ async function runExtraction(positions) {
     if (positions) {
       const results = [...state.results];
       const edits = [...state.edits];
-      positions.forEach((pos, k) => { results[pos] = documents[k]; delete edits[pos]; });
+      positions.forEach((pos, k) => { results[pos] = documents[k]; delete edits[pos]; delete state.saved[pos]; });
       Object.assign(state, { results, edits, meta: { ...state.meta, ...meta, seconds } });
     } else {
-      Object.assign(state, { results: documents, edits: [], meta: { ...meta, seconds } });
+      Object.assign(state, { results: documents, edits: [], saved: [], meta: { ...meta, seconds } });
       makeRoomForResults();
       const firstOk = documents.findIndex((r) => r.status === "ok");
       state.selected = firstOk >= 0 ? firstOk : 0;
@@ -370,6 +387,7 @@ async function runExtraction(positions) {
   }
   // przy ponawianiu arkusz innego dokumentu zostaje, żeby nie przerywać wpisywania
   render({ sheet: !positions || positions.includes(state.selected) });
+  scheduleDraftSave();
   if (focusWasHere) (focusTarget ?? el.list.querySelectorAll(".file-main")[state.selected] ?? el.submit).focus();
 }
 
@@ -403,7 +421,10 @@ function render({ sheet = true } = {}) {
     else b.removeAttribute("aria-current");
   });
   el.modeFlag.hidden = state.mode !== "mock";
-  el.title.textContent = state.caseName ? `Sprawa: ${state.caseName}` : "Sprawa odwoławcza";
+  el.title.textContent = state.view === "help" ? "Instrukcja"
+    : state.view === "types" ? "Typy dokumentów"
+    : state.caseName ? `Sprawa: ${state.caseName}` : "Sprawa odwoławcza";
+  el.steps.hidden = state.view !== "case";   // kroki dotyczą tylko pracy ze sprawą
 
   const step = state.results ? 3 : state.files.length ? 2 : 1;
   el.steps.querySelectorAll("li").forEach((li) => {
@@ -423,9 +444,11 @@ function render({ sheet = true } = {}) {
   el.message.dataset.kind = notice?.kind ?? "error";
   el.messageText.textContent = notice?.text ?? "";
   el.retryRequest.hidden = !notice?.retry || state.pending;
+  el.restoreBox.hidden = !state.restore;
+  if (state.restore) el.restoreText.textContent = `W tej przeglądarce jest kopia robocza tej sprawy: ${describeDraft(state.restore.draft)}. Przywrócenie wczyta zapisane wyniki i poprawki bez ponownego przetwarzania.`;
   el.actions.hidden = state.files.length === 0;
   el.submit.disabled = state.pending;
-  el.submit.classList.toggle("btn-line", Boolean(state.results));
+  el.submit.classList.toggle("btn-line", Boolean(state.results || state.restore));   // przy pytaniu o kopię główną akcją jest „Przywróć”
   const n = state.files.length;
   el.submit.textContent = state.pending
     ? (state.pendingSet ? "Ponawianie…" : "Przetwarzanie…")
@@ -439,6 +462,7 @@ function render({ sheet = true } = {}) {
     : state.pendingSet ? `Ponowne przetwarzanie: ${state.pendingSet.size} ${plural(state.pendingSet.size, "plik", "pliki", "plików")} z błędem.`
     : "System rozpoznaje typ każdego dokumentu po treści i wyciąga dane.";
 
+  renderDocsToggle();
   renderList();
   renderSummary();
   if (sheet) renderSheet();
@@ -446,6 +470,47 @@ function render({ sheet = true } = {}) {
 
 function renderList() {
   el.list.replaceChildren(...state.files.map(renderFileRow));
+  el.docsMini.replaceChildren(...state.files.map(renderMiniRow));
+}
+
+/* zwijana kolumna „Dokumenty sprawy” (tylko na komputerze, gdy są pliki): więcej miejsca na rubryki i PDF */
+const DOCS_KEY = "o2j-docs";
+state.docsCollapsed = readPref(DOCS_KEY, "expanded") === "collapsed";
+el.docsToggle.addEventListener("click", () => {
+  state.docsCollapsed = !state.docsCollapsed;
+  try { localStorage.setItem(DOCS_KEY, state.docsCollapsed ? "collapsed" : "expanded"); } catch { /* bez pamięci */ }
+  render({ sheet: false });
+  el.docsToggle.focus();
+});
+
+function renderDocsToggle() {
+  const collapsed = state.docsCollapsed && state.files.length > 0;
+  el.viewCase.dataset.docs = collapsed ? "collapsed" : "expanded";
+  el.docsToggle.hidden = state.files.length === 0;
+  el.docsToggle.setAttribute("aria-expanded", String(!collapsed));
+  const label = collapsed ? "Rozwiń listę dokumentów" : "Zwiń listę dokumentów";
+  el.docsToggleLabel.textContent = label;
+  el.docsToggle.title = label;
+  el.docsMini.hidden = !collapsed;
+}
+
+function renderMiniRow(file, index) {
+  const status = statusAt(index);
+  const entry = state.results?.[index];
+  const what = status === "ok" ? typeLabel(entry.type) : STATUS_TEXT[status];
+  const edited = entry?.status === "ok" && countEdits(index) ? ", poprawiony" : "";
+  const li = document.createElement("li");
+  const b = node("button", "docs-mini-btn", String(index + 1));
+  b.type = "button";
+  b.dataset.status = status;
+  b.dataset.current = String(index === state.selected);
+  b.setAttribute("aria-current", String(index === state.selected));
+  b.setAttribute("aria-label", `Pozycja ${index + 1}: ${file.name}, ${what}${edited}`);
+  b.title = `${file.name}: ${what}${edited}`;
+  if (edited) b.dataset.edited = "true";
+  b.addEventListener("click", () => selectDocument(index));
+  li.append(b);
+  return li;
 }
 
 function renderFileRow(file, index) {
@@ -475,7 +540,7 @@ function renderFileRow(file, index) {
   } else {
     meta.append(node("span", null, formatSize(file.size)));
   }
-  main.append(node("span", "sr-only", `Pozycja ${index + 1}: `), node("span", "file-name", file.name), meta);
+  main.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "file-name", file.name), meta);
   li.append(pos, main);
 
   if (!state.results && !state.pending) {
@@ -516,7 +581,8 @@ function renderSummary() {
   if (state.meta) {
     const info = [];
     if (state.meta.model) info.push(`model: ${state.meta.model}`);
-    info.push(`${state.meta.seconds.toFixed(1).replace(".", ",")} s`);
+    if (Number.isFinite(state.meta.seconds)) info.push(`${state.meta.seconds.toFixed(1).replace(".", ",")} s`);
+    if (state.meta.restored) info.push("przywrócono z kopii");
     const div = node("div", "tally-meta");
     div.append(node("dt", null, "Przebieg"), node("dd", null, info.join(" · ")));
     items.push(div);
@@ -526,9 +592,14 @@ function renderSummary() {
   const files = resultFiles();
   el.downloadAll.hidden = files.length === 0;
   el.downloadAllLabel.textContent = `Pobierz wyniki (ZIP, ${files.length} ${plural(files.length, "plik", "pliki", "plików")})`;
+  const open = unsaved().length;
+  el.unsavedNote.hidden = !open;
+  el.unsavedNote.textContent = open
+    ? `Poprawki w ${open} ${plural(open, "dokumencie", "dokumentach", "dokumentach")} nie są jeszcze pobrane. Kopia robocza zostaje w tej przeglądarce.`
+    : "";
 }
 
-/** Pliki wynikowe jak w output/<sprawa>/: JSON dla rozpoznanych, pusty .json dla nierozpoznanych. */
+/** Pliki wynikowe jak w output/<sprawa>/: JSON dla rozpoznanych, `{}` dla nierozpoznanych (wymóg UZP). */
 function resultFiles() {
   if (!state.results) return [];
   const folder = safeName(state.caseName ?? "sprawa");
@@ -539,14 +610,16 @@ function resultFiles() {
     let name = jsonName(state.files[i].name);
     for (let k = 2; used.has(name); k++) name = jsonName(state.files[i].name).replace(/\.json$/, ` (${k}).json`);
     used.add(name);
-    files.push({ name: `${folder}/${name}`, text: r.status === "ok" ? `${JSON.stringify(dataAt(i), null, 2)}\n` : "" });
+    files.push({ name: `${folder}/${name}`, text: r.status === "ok" ? `${JSON.stringify(dataAt(i), null, 2)}\n` : "{}" });
   });
   return files;
 }
 
 el.downloadAll.addEventListener("click", () => {
   const files = resultFiles();
-  if (files.length) downloadBlob(`${safeName(state.caseName ?? "sprawa")}.zip`, zipStore(files));
+  if (!files.length) return;
+  downloadBlob(`${safeName(state.caseName ?? "sprawa")}.zip`, zipStore(files));
+  markSaved(state.results.map((_, i) => i));
 });
 
 /* ---------- arkusz ---------- */
@@ -564,7 +637,7 @@ function renderSheet() {
   const entry = state.results?.[index];
   const head = node("div", "sheet-head");
   const titleRow = node("div", "sheet-title-row");
-  const title = node("h2", "sheet-title", file.name);
+  const title = fileNameNode("h2", "sheet-title", file.name);
   title.id = "sheet-heading";
   titleRow.append(title);
   const pending = statusAt(index) === "pending";
@@ -581,7 +654,7 @@ function renderSheet() {
       ["Dodaj pozostałe dokumenty sprawy i kliknij „Przetwórz”. Dane tego pliku pojawią się w tym miejscu."]);
   } else if (entry.status === "unknown") {
     left = stateBlock("Nie rozpoznano typu dokumentu", [
-      "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie pusty plik JSON, zgodnie z formatem UZP.",
+      "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie plik JSON z samym {}, zgodnie z wymogiem UZP.",
       "Jeśli to jednak jeden z tych dokumentów, sprawdź w podglądzie, czy PDF jest kompletny i czytelny.",
     ]);
   } else if (entry.status === "error") {
@@ -623,7 +696,10 @@ function sheetTools(index, file) {
   download.type = "button";
   download.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>';
   download.append(`Pobierz ${jsonName(file.name)}`);
-  download.addEventListener("click", () => downloadJson(file.name, dataAt(index)));
+  download.addEventListener("click", () => {
+    downloadJson(file.name, dataAt(index));
+    markSaved([index]);
+  });
   const pdfToggle = node("button", "btn btn-line btn-toggle", "Podgląd PDF");
   pdfToggle.type = "button";
   pdfToggle.setAttribute("aria-pressed", String(state.showPdf));
@@ -662,6 +738,7 @@ function refreshAfterEdit(index) {
   if (info) fillSheetInfo(info, index, state.results[index]);
   renderList();
   renderSummary();
+  scheduleDraftSave();
 }
 
 function pdfPane(index) {
@@ -731,16 +808,7 @@ function completeness(entry, data = entry.data) {
 const isEmptyValue = (v) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
 
 function countEdits(index) {
-  const edited = state.edits[index];
-  if (!edited) return 0;
-  let n = 0;
-  const walk = (a, b) => {
-    if (a && typeof a === "object") {
-      new Set([...Object.keys(a), ...Object.keys(b && typeof b === "object" ? b : {})]).forEach((k) => walk(a[k], b?.[k]));
-    } else if (JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)) n += 1;
-  };
-  walk(edited, state.results[index].data);
-  return n;
+  return countChanges(state.edits[index], state.results?.[index]?.data);
 }
 
 function isEdited(index, path) {
@@ -769,6 +837,97 @@ function evidenceMap(entry) {
   }
   return map;
 }
+
+/* ---------- kopia robocza poprawek (draft.js) ----------
+   Po każdej poprawce dane sprawy trafiają do localStorage. Po ponownym wczytaniu
+   tych samych plików (nazwy i rozmiary) panel pyta „Przywrócić poprawki?”.
+   Przy próbie zamknięcia lub odświeżenia strony z niepobranymi poprawkami
+   przeglądarka pokazuje ostrzeżenie. */
+
+function readStore() {
+  try { return parseStore(localStorage.getItem(DRAFT_STORAGE_KEY)); } catch { return parseStore(null); }
+}
+function writeStore(store) {
+  try {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(store));
+    return true;
+  } catch {
+    return false;   // tryb prywatny, zablokowana pamięć albo brak miejsca: panel działa dalej bez kopii
+  }
+}
+
+let draftTimer = 0;
+function scheduleDraftSave() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(saveDraftNow, 400);
+}
+function saveDraftNow() {
+  clearTimeout(draftTimer);
+  if (!state.results || state.pending || state.restore) return;
+  const key = caseKey(state.files);
+  const draft = buildDraft({
+    files: state.files, results: state.results, edits: state.edits, meta: state.meta, caseName: state.caseName,
+  });
+  // bez poprawek kasujemy tylko kopię zapisaną w tej sesji (np. po cofnięciu wszystkich zmian);
+  // starszej kopii nie ruszamy, dopóki użytkownik sam jej nie odrzuci albo nie nadpisze nową poprawką
+  if (!draft && !draftWritten) return;
+  if (writeStore(putDraft(readStore(), key, draft))) draftWritten = Boolean(draft);
+}
+
+/** Po zmianie listy plików: czy w pamięci jest kopia dokładnie tej sprawy? */
+function checkRestore() {
+  const draft = !state.results && state.files.length ? findDraft(readStore(), state.files) : null;
+  const was = state.restore;
+  state.restore = draft ? { draft } : null;
+  if (draft && !was) announce(`Przywrócić poprawki? ${describeDraft(draft)}.`);
+}
+
+function restoreDraft() {
+  const draft = state.restore?.draft;
+  const aligned = draft && alignDraft(draft, state.files);
+  state.restore = null;
+  if (!aligned) {
+    state.notice = { kind: "error", text: "Nie udało się przywrócić poprawek: zestaw plików się zmienił.", retry: false };
+    render();
+    return;
+  }
+  // pokazujemy pierwszy poprawiony dokument, żeby od razu było widać, co wróciło
+  const firstEdited = aligned.edits.findIndex(Boolean);
+  const firstOk = aligned.results.findIndex((r) => r?.status === "ok");
+  Object.assign(state, {
+    results: aligned.results, edits: aligned.edits, saved: [],
+    meta: draft.meta ? { ...draft.meta, restored: true } : null,
+    selected: firstEdited >= 0 ? firstEdited : Math.max(0, firstOk), notice: null, active: null,
+  });
+  if (!state.caseName && draft.caseName) state.caseName = draft.caseName;
+  draftWritten = true;
+  render();
+  announce(`Przywrócono poprawki: ${describeDraft(draft)}.`);
+  el.list.querySelectorAll(".file-main")[state.selected]?.focus();
+}
+
+function dropDraft() {
+  if (state.restore) writeStore(putDraft(readStore(), state.restore.draft.key, null));
+  state.restore = null;
+  render();
+  el.submit.focus();
+}
+
+function markSaved(positions) {
+  positions.forEach((i) => { state.saved[i] = JSON.stringify(dataAt(i)); });
+  renderSummary();
+}
+
+const unsaved = () => unsavedPositions({ results: state.results, edits: state.edits, saved: state.saved });
+
+window.addEventListener("beforeunload", (event) => {
+  saveDraftNow();
+  if (!unsaved().length && !state.pending) return;
+  event.preventDefault();
+  event.returnValue = "";   // starsze przeglądarki pokazują okno tylko z ustawionym returnValue
+});
+window.addEventListener("pagehide", saveDraftNow);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveDraftNow(); });
 
 /* ---------- rubryki do wpisywania ---------- */
 
@@ -820,6 +979,7 @@ function fieldBlock(field, value, ctx, path) {
   if (choice) label.id = `${id}-label`;
   else label.htmlFor = id;
   label.append(node("span", "field-no", `${ctx.n}.`), " ", field.label);
+  if (field.hint) label.append(node("span", "field-hint", ` (${field.hint})`));
   // dopiski i przycisk „cofnij” obok etykiety, nie w niej (opis rubryki przez aria-describedby)
   const tags = node("span", "field-tags");
   head.append(label, tags);
@@ -912,15 +1072,24 @@ function cellsBox(input, cellsCount, gaps = []) {
     const chars = [...input.value];
     const count = Math.max(cellsCount(), chars.length);
     const caret = document.activeElement === input ? Math.min(input.selectionStart ?? chars.length, count - 1) : -1;
-    const cells = [];
-    for (let i = 0; i < count; i++) {
-      if (gaps.includes(i)) cells.push(node("span", "cells-gap"));
+    const cell = (i) => {
       const c = node("i", null, chars[i] ?? "");
       if (!chars[i]) c.className = "is-empty";
       if (i === caret) c.classList.add("is-caret");
-      cells.push(c);
+      return c;
+    };
+    const range = (a, b) => Array.from({ length: Math.max(0, b - a) }, (_, k) => cell(a + k));
+    if (gaps.length) {
+      // grupy (rachunek) łamią się w całości: w wąskiej kolumnie przenosi się cała czwórka cyfr
+      const bounds = [0, ...gaps.filter((g) => g < count), count];
+      row.replaceChildren(...bounds.slice(1).map((end, k) => {
+        const grp = node("span", "cells-grp");
+        grp.append(...range(bounds[k], end));
+        return grp;
+      }));
+    } else {
+      row.replaceChildren(...range(0, count));
     }
-    row.replaceChildren(...cells);
     box.dataset.empty = String(chars.length === 0);
   };
   ["input", "focus", "keyup", "click", "select"].forEach((t) => input.addEventListener(t, paint));
@@ -1315,16 +1484,21 @@ function downloadBlob(name, blob) {
 
 /* ---------- pomocnicze ---------- */
 
+/** Nazwa pliku, którą da się złamać po „_” i „-” albo przed rozszerzeniem zamiast w środku słowa. */
+function fileNameNode(tag, className, name) {
+  const n = node(tag, className);
+  name.split(/(?<=[_\-])|(?=\.)/).forEach((part, i) => {
+    if (i) n.append(document.createElement("wbr"));
+    n.append(part);
+  });
+  return n;
+}
+
 function node(tag, className, text) {
   const n = document.createElement(tag);
   if (className) n.className = className;
   if (text !== undefined) n.textContent = text;
   return n;
-}
-function plural(n, one, few, many) {
-  if (n === 1) return one;
-  const d = n % 10, t = n % 100;
-  return d >= 2 && d <= 4 && (t < 12 || t > 14) ? few : many;
 }
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
