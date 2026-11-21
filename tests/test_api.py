@@ -1,6 +1,7 @@
 import io
 import importlib.util
 import json
+import shutil
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -135,3 +136,110 @@ def test_document_types_list_configured_schemas():
     assert set(types) == {"odwolanie", "pelnomocnictwo", "przelew"}
     assert "przelew_bankowy.kwota" in types["przelew"]
     assert any(path.startswith("Odwolujacy[].") for path in types["odwolanie"])
+
+
+NEW_TYPE_YAML = """id: potwierdzenie_odbioru
+schema: potwierdzenie_odbioru.schema.json
+classification:
+  positive_patterns:
+    - '(?i)Potwierdzenie\\s+odbioru'
+  minimum_matches: 1
+fields:
+  numer:
+    pattern: '(?im)Numer\\s+potwierdzenia\\s*[:.]?\\s*(?P<value>\\S[^\\r\\n]*?)[ \\t\\r]*$'
+    normalize: text
+options:
+  label: "Potwierdzenie odbioru"
+  llm_instructions: "Dokument typu „Potwierdzenie odbioru”."
+"""
+NEW_TYPE_SCHEMA = json.dumps({
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["numer"],
+    "properties": {"numer": {"type": ["string", "null"], "description": "Numer potwierdzenia"}},
+})
+
+
+def type_app(tmp_path):
+    """API na kopii konfiguracji repo w katalogu tymczasowym, bez modelu (odczyt regułami)."""
+    root = Path(__file__).resolve().parents[1]
+    config_dir, schema_dir = tmp_path / "configs", tmp_path / "schemas"
+    shutil.copytree(root / "configs/documents", config_dir)
+    shutil.copytree(root / "schemas", schema_dir)
+    processor = DocumentProcessor(load_configs(config_dir, schema_dir), root / "prompts/system_pl.md")
+    app = create_app(processor, frontend_dir=None, config_dir=config_dir, schema_dir=schema_dir)
+    return TestClient(app), config_dir, schema_dir
+
+
+def test_new_type_is_saved_validated_and_used_without_restart(tmp_path):
+    client, config_dir, schema_dir = type_app(tmp_path)
+    response = client.post("/api/document-types", json={"yaml": NEW_TYPE_YAML, "schema": NEW_TYPE_SCHEMA})
+    assert response.status_code == 201
+    assert response.json() == {
+        "doc_type": "potwierdzenie_odbioru", "label": "Potwierdzenie odbioru",
+        "files": ["configs/documents/potwierdzenie_odbioru.yaml", "schemas/potwierdzenie_odbioru.schema.json"],
+    }
+    assert (config_dir / "potwierdzenie_odbioru.yaml").read_text(encoding="utf-8") == NEW_TYPE_YAML
+    assert json.loads((schema_dir / "potwierdzenie_odbioru.schema.json").read_text(encoding="utf-8"))["required"] == ["numer"]
+    assert "potwierdzenie_odbioru" in load_configs(config_dir, schema_dir)
+
+    types = {entry["doc_type"]: entry for entry in client.get("/api/document-types").json()["types"]}
+    assert types["potwierdzenie_odbioru"]["label"] == "Potwierdzenie odbioru"
+    assert types["potwierdzenie_odbioru"]["fields"] == ["numer"]
+
+    pdf = tmp_path / "odbior.pdf"
+    create_pdf(pdf, ("Potwierdzenie odbioru", "Numer potwierdzenia: PO/7/2026"))
+    result = client.post("/api/extract", files=[("files", ("odbior.pdf", pdf.read_bytes(), "application/pdf"))]).json()
+    assert result["documents"][0]["type"] == "potwierdzenie_odbioru"
+    assert result["documents"][0]["data"] == {"numer": "PO/7/2026"}
+
+
+def test_existing_type_is_not_overwritten(tmp_path):
+    client, config_dir, _ = type_app(tmp_path)
+    before = (config_dir / "przelew.yaml").read_bytes()
+    clash = NEW_TYPE_YAML.replace("potwierdzenie_odbioru", "przelew")
+    response = client.post("/api/document-types", json={"yaml": clash, "schema": NEW_TYPE_SCHEMA})
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "type_exists"
+    assert (config_dir / "przelew.yaml").read_bytes() == before
+
+
+@pytest.mark.parametrize(("yaml_text", "schema_text", "fragment"), [
+    (NEW_TYPE_YAML.replace("Potwierdzenie\\s+odbioru'", "(niezamknięty'"), NEW_TYPE_SCHEMA, "potwierdzenie_odbioru.yaml"),
+    (NEW_TYPE_YAML, "{ to nie jest JSON", "potwierdzenie_odbioru.yaml"),
+    (NEW_TYPE_YAML.replace("  numer:", "  brak_w_schemacie:"), NEW_TYPE_SCHEMA, "poza schematem"),
+    (NEW_TYPE_YAML + "extractor: os:system\n", NEW_TYPE_SCHEMA, "extractor"),
+    (NEW_TYPE_YAML.replace("schema: potwierdzenie_odbioru", "schema: ../przelew"), NEW_TYPE_SCHEMA, "schema"),
+    (NEW_TYPE_YAML.replace("id: potwierdzenie_odbioru", "id: unknown"), NEW_TYPE_SCHEMA, "id"),
+    ("id: [", NEW_TYPE_SCHEMA, "składni"),
+])
+def test_invalid_type_is_rejected_and_nothing_is_written(tmp_path, yaml_text, schema_text, fragment):
+    client, config_dir, schema_dir = type_app(tmp_path)
+    before = sorted(p.name for p in (*config_dir.iterdir(), *schema_dir.iterdir()))
+    response = client.post("/api/document-types", json={"yaml": yaml_text, "schema": schema_text})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_config"
+    assert fragment in response.json()["error"]["message"]
+    assert sorted(p.name for p in (*config_dir.iterdir(), *schema_dir.iterdir())) == before
+    assert {e["doc_type"] for e in client.get("/api/document-types").json()["types"]} == {"odwolanie", "pelnomocnictwo", "przelew"}
+
+
+def test_type_upload_can_be_disabled(tmp_path, monkeypatch):
+    client, config_dir, _ = type_app(tmp_path)
+    monkeypatch.setenv("ALLOW_TYPE_UPLOAD", "0")
+    response = client.post("/api/document-types", json={"yaml": NEW_TYPE_YAML, "schema": NEW_TYPE_SCHEMA})
+    assert response.status_code == 403
+    assert not (config_dir / "potwierdzenie_odbioru.yaml").exists()
+
+
+def test_type_upload_request_errors(tmp_path):
+    client, _, _ = type_app(tmp_path)
+    assert client.post("/api/document-types", json={"yaml": NEW_TYPE_YAML}).status_code == 400
+    response = client.post("/api/document-types", content=b"nie json", headers={"content-type": "application/json"})
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "Wyślij treść pliku YAML i schematu JSON."
+    big = client.post("/api/document-types", json={"yaml": NEW_TYPE_YAML + "#" * 70_000, "schema": NEW_TYPE_SCHEMA})
+    assert big.status_code == 413
+    fake = TestClient(create_app(FakeProcessor(), frontend_dir=None))
+    assert fake.post("/api/document-types", json={"yaml": NEW_TYPE_YAML, "schema": NEW_TYPE_SCHEMA}).status_code == 501
