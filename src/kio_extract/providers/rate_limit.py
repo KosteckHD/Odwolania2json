@@ -84,7 +84,7 @@ class RequestCoordinator:
                     connection.request("POST", path, body=body, headers=headers)
                     response = connection.getresponse()
                     status = response.status
-                    retry_after = response.getheader("Retry-After") if status == 429 else None
+                    retry_after = response.getheader("Retry-After") if status in (429, 503) else None
                     payload = response.read() if status == 200 else b""
                 except (OSError, HTTPException) as exc:
                     # zerwane połączenie lub przekroczony czas: do 2 ponowień, potem błąd dokumentu
@@ -96,7 +96,8 @@ class RequestCoordinator:
                     connection.close()
                 if status == 200:
                     return payload
-                if status != 429:
+                # 429 (limit) i chwilowe błędy bramki 5xx (np. 504 przy przeciążeniu) ponawiamy z odczekaniem
+                if status not in (429, 500, 502, 503, 504):
                     raise DocumentError("llm_http", f"API LLM zwróciło kod HTTP {status}")
                 requested = retry_after_seconds(retry_after)
                 backoff = 2 ** min(attempt, 10)
@@ -104,6 +105,8 @@ class RequestCoordinator:
                 with self.lock:
                     self.next_request = max(self.next_request, time.monotonic() + wait)
                 if attempt == settings.retries or wait > settings.max_wait:
+                    if status != 429:
+                        raise DocumentError("llm_http", f"API LLM zwróciło kod HTTP {status}")
                     raise DocumentError("llm_rate_limit", "Dostawca ograniczył liczbę żądań LLM")
 
 
