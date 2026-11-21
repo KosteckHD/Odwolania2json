@@ -10,9 +10,6 @@ from http.client import HTTPException
 from ..contracts import ConfigurationError, DocumentError
 
 
-TRANSIENT_STATUSES = frozenset({408, 500, 502, 503, 504})
-
-
 @dataclass(frozen=True)
 class RateLimitSettings:
     interval: float = 1.0
@@ -99,10 +96,6 @@ class RequestCoordinator:
                     connection.close()
                 if status == 200:
                     return payload
-                if status in TRANSIENT_STATUSES and attempt < min(3, settings.retries):
-                    # przeciążony serwer dostawcy (5xx, 408): krótkie ponowienie jak przy zerwanym połączeniu
-                    time.sleep(min(2 ** (attempt + 1), settings.max_wait))
-                    continue
                 if status != 429:
                     raise DocumentError("llm_http", f"API LLM zwróciło kod HTTP {status}")
                 requested = retry_after_seconds(retry_after)
