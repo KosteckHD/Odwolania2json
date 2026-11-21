@@ -102,8 +102,10 @@ def create_app(processor=None, frontend_dir=FRONTEND, config_dir=ROOT / "configs
     @app.get("/api/document-types")
     def document_types():
         configs = getattr(current["processor"], "configs", {})
+        # `schema` pozwala panelowi zbudować pełny formularz (etykiety z description, daty, tak/nie, listy)
+        # także dla typów dodanych w kreatorze, których panel nie zna z góry.
         return {"types": [{"doc_type": key, "label": (config.options or {}).get("label"),
-                           "fields": schema_fields(config.schema)}
+                           "fields": schema_fields(config.schema), "schema": config.schema}
                           for key, config in configs.items()]}
 
     @app.post("/api/document-types", status_code=201)

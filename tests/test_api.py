@@ -136,6 +136,8 @@ def test_document_types_list_configured_schemas():
     assert set(types) == {"odwolanie", "pelnomocnictwo", "przelew"}
     assert "przelew_bankowy.kwota" in types["przelew"]
     assert any(path.startswith("Odwolujacy[].") for path in types["odwolanie"])
+    schemas = {entry["doc_type"]: entry["schema"] for entry in response.json()["types"]}
+    assert schemas["przelew"] == processor.configs["przelew"].schema
 
 
 NEW_TYPE_YAML = """id: potwierdzenie_odbioru
@@ -187,6 +189,7 @@ def test_new_type_is_saved_validated_and_used_without_restart(tmp_path):
     types = {entry["doc_type"]: entry for entry in client.get("/api/document-types").json()["types"]}
     assert types["potwierdzenie_odbioru"]["label"] == "Potwierdzenie odbioru"
     assert types["potwierdzenie_odbioru"]["fields"] == ["numer"]
+    assert types["potwierdzenie_odbioru"]["schema"]["properties"]["numer"]["description"] == "Numer potwierdzenia"
 
     pdf = tmp_path / "odbior.pdf"
     create_pdf(pdf, ("Potwierdzenie odbioru", "Numer potwierdzenia: PO/7/2026"))
