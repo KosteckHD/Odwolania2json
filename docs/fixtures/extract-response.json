@@ -13,7 +13,12 @@
           "tytul": "Wpis od odwołania",
           "z_rachunku": null
         }
-      }
+      },
+      "evidence": [
+        {"field_path": "przelew_bankowy.data_operacji", "page_number": 1, "method": "llm+search"},
+        {"field_path": "przelew_bankowy.kwota", "page_number": 1, "method": "llm+search"},
+        {"field_path": "przelew_bankowy.tytul", "page_number": 1, "method": "llm+search"}
+      ]
     },
     {
       "filename": "ogloszenie.pdf",

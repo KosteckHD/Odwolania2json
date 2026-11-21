@@ -74,6 +74,33 @@ export async function fetchDocumentTypes({ fetchImpl = fetch } = {}) {
   return body.types;
 }
 
+/**
+ * Zapisuje typ z kreatora w backendzie (POST /api/document-types).
+ * Backend sprawdza pliki tymi samymi regułami co przy starcie i od razu zaczyna używać nowego typu.
+ * Zwraca { doc_type, label, files }; przy odrzuceniu rzuca ApiError z komunikatem backendu.
+ */
+export async function saveDocumentType({ yaml, schema }, { fetchImpl = fetch } = {}) {
+  let response;
+  try {
+    response = await fetchImpl(TYPES_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ yaml, schema }),
+    });
+  } catch {
+    throw new ApiError("network", "Brak połączenia z serwerem. Sprawdź, czy backend działa.");
+  }
+  let body = null;
+  try { body = await response.json(); } catch { body = null; }
+  if (!response.ok) {
+    const fallback = response.status === 404 || response.status === 405
+      ? "Ten serwer nie obsługuje zapisu typów. Pobierz pliki i dodaj je ręcznie."
+      : `Nie udało się zapisać typu (HTTP ${response.status}).`;
+    throw new ApiError("server", body?.error?.message ?? fallback, response.status);
+  }
+  return body;
+}
+
 /** Dobiera wpis z próbki po nazwie pliku; nieznane nazwy dostają kolejne wpisy. */
 export function pickMockEntry(fileName, index, documents) {
   const name = fileName.toLowerCase();
@@ -128,4 +155,70 @@ function wait(ms, signal) {
       reject(new DOMException("Przerwano", "AbortError"));
     }, { once: true });
   });
+}
+
+/** Ile plików wysyłamy naraz w trybie „plik po pliku”. */
+export const EXTRACT_CONCURRENCY = 2;
+
+/** Wpis błędu dla jednego pliku, gdy jego żądanie się nie udało (sieć, HTTP 5xx, zły format). */
+export function failedEntry(file, error) {
+  const network = error?.kind === "network";
+  return {
+    filename: file.name,
+    status: "error",
+    type: null,
+    data: null,
+    error: {
+      code: network ? "network_error" : error?.status ? `http_${error.status}` : "request_failed",
+      message: error?.message ?? "Przetwarzanie pliku nie powiodło się.",
+    },
+  };
+}
+
+/**
+ * Przetwarza pliki jeden po drugim (każdy PDF osobnym POST /api/extract), najwyżej `concurrency` naraz.
+ * Każdy wynik trafia do `onResult(index, entry, meta)` od razu po nadejściu; błąd jednego pliku
+ * nie zatrzymuje pozostałych (plik dostaje wpis error). Przerwanie (`signal`) zatrzymuje kolejkę
+ * i trwające żądania; gotowe wyniki zostają, a nieprzetworzone pozycje mają w `documents` null.
+ * @param {File[]} files
+ * @param {{concurrency?: number, signal?: AbortSignal, onStart?: (i:number) => void,
+ *   onResult?: (i:number, entry:object, meta:object|null) => void,
+ *   extractOne?: (file: File, opts: {signal?: AbortSignal}) => Promise<{documents: object[], meta?: object|null}>}} options
+ * @returns {Promise<{documents: (object|null)[], meta: object|null, aborted: boolean}>}
+ */
+export async function extractEach(files, {
+  concurrency = EXTRACT_CONCURRENCY, signal, onStart, onResult,
+  extractOne = (file, opts) => extractWithApi([file], opts),
+} = {}) {
+  const documents = files.map(() => null);
+  let meta = null;
+  let next = 0;
+  const aborted = () => Boolean(signal?.aborted);
+
+  const worker = async () => {
+    while (!aborted() && next < files.length) {
+      const index = next++;
+      const file = files[index];
+      onStart?.(index);
+      let entry;
+      try {
+        const out = await extractOne(file, { signal });
+        if (aborted()) return;
+        entry = out?.documents?.[0];
+        if (!entry) throw new ApiError("server", "Serwer zwrócił odpowiedź w nieoczekiwanym formacie.");
+        meta ??= out.meta ?? null;
+      } catch (error) {
+        if (aborted() || error?.name === "AbortError") return;
+        entry = failedEntry(file, error);
+      }
+      documents[index] = { ...entry, filename: entry.filename ?? file.name };
+      try {
+        onResult?.(index, documents[index], meta);
+      } catch (error) {
+        console.error(error);   // błąd w pokazywaniu wyniku nie może zatrzymać kolejki
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, files.length)) }, worker));
+  return { documents, meta, aborted: aborted() };
 }

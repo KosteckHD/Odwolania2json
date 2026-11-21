@@ -76,3 +76,58 @@ export function pickText(text) {
   if (colon > 0 && colon < 40 && t.slice(colon + 1).trim()) t = t.slice(colon + 1).trim();
   return t.replace(/^[„"'«]+|[”"'»]+$/g, "").trim();
 }
+
+/* ---------- sumy kontrolne identyfikatorów ----------
+   Zwracają true (zgadza się), false (nie zgadza się) albo null (nie da się sprawdzić:
+   inna długość, znaki spoza cyfr, identyfikator bez sumy kontrolnej, np. KRS). */
+
+const weighted = (digits, weights) => weights.reduce((sum, w, i) => sum + w * Number(digits[i]), 0);
+
+/** NIP: wagi 6,5,7,2,3,4,5,6,7, reszta z dzielenia przez 11 to ostatnia cyfra (10 = numer błędny). */
+export function nipValid(value) {
+  const d = String(value ?? "");
+  if (!/^\d{10}$/.test(d)) return null;
+  const r = weighted(d, [6, 5, 7, 2, 3, 4, 5, 6, 7]) % 11;
+  return r !== 10 && r === Number(d[9]);
+}
+
+/** REGON 9- i 14-cyfrowy: reszta z 11 (10 liczy się jako 0) to ostatnia cyfra. */
+export function regonValid(value) {
+  const d = String(value ?? "");
+  const weights = d.length === 9 ? [8, 9, 2, 3, 4, 5, 6, 7]
+    : d.length === 14 ? [2, 4, 8, 5, 0, 9, 7, 3, 6, 1, 2, 4, 8] : null;
+  if (!weights || !/^\d+$/.test(d)) return null;
+  const r = weighted(d, weights) % 11;
+  return (r === 10 ? 0 : r) === Number(d.at(-1));
+}
+
+/** PESEL: wagi 1,3,7,9,1,3,7,9,1,3; cyfra kontrolna = (10 − suma mod 10) mod 10. */
+export function peselValid(value) {
+  const d = String(value ?? "");
+  if (!/^\d{11}$/.test(d)) return null;
+  return (10 - (weighted(d, [1, 3, 7, 9, 1, 3, 7, 9, 1, 3]) % 10)) % 10 === Number(d[10]);
+}
+
+/** Numer rachunku NRB (26 cyfr) jako IBAN PL: reszta z dzielenia przez 97 równa 1. */
+export function accountValid(value) {
+  const d = String(value ?? "").replace(/\s/g, "");
+  if (!/^\d{26}$/.test(d)) return null;
+  // „PL” → 25 21; liczba za długa na Number, więc reszta liczona kawałkami
+  const moved = `${d.slice(2)}2521${d.slice(0, 2)}`;
+  let rest = 0;
+  for (const ch of moved) rest = (rest * 10 + Number(ch)) % 97;
+  return rest === 1;
+}
+
+/** Sprawdzenie sumy kontrolnej po nazwie klucza rubryki (nip, regon, pesel, rachunek). KRS nie ma sumy. */
+export function checksumValid(key, value) {
+  if (value === null || value === undefined || value === "") return null;
+  const k = key.split(".").at(-1).toLowerCase();
+  if (k === "nip") return nipValid(value);
+  if (k === "regon") return regonValid(value);
+  if (k === "pesel") return peselValid(String(value).padStart(11, "0"));
+  if (k.includes("rachun")) return accountValid(value);
+  return null;
+}
+
+export const CHECKSUM_WARNING = "suma kontrolna się nie zgadza, sprawdź cyfry";

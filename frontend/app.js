@@ -1,19 +1,15 @@
-import { ApiError, extractWithApi, extractWithMock, fetchDocumentTypes } from "./api.js";
-import { DOC_TYPES, getPath, typeLabel } from "./fields.js";
+import { extractEach, extractWithApi, extractWithMock, fetchDocumentTypes } from "./api.js";
+import { DOC_TYPES, emptyListItem, getPath, schemaToSpec } from "./fields.js";
 import { zipStore } from "./zip.js";
+import { buildResultFiles, jsonName, retypeEntry, safeName } from "./export.js";
 import { createPdfViewer } from "./pdfview.js";
-import { expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
+import { STATUS, docsSummary, insertPlacement, positionText, progressText } from "./layout.js";
+import { CHECKSUM_WARNING, checksumValid, expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
 import {
   DRAFT_STORAGE_KEY, alignDraft, buildDraft, caseKey, countChanges, describeDraft, findDraft,
   parseStore, plural, putDraft, unsavedPositions,
 } from "./draft.js";
 
-const STATUS_TEXT = {
-  selected: "Czeka na przetworzenie",
-  pending: "Przetwarzanie…",
-  unknown: "Nie rozpoznano",
-  error: "Błąd",
-};
 
 const state = {
   mode: readMode(),
@@ -36,10 +32,19 @@ const state = {
   active: null,       // rubryka z ostatnim fokusem: { index, path, field, apply(text) }
   saved: [],          // JSON danych z chwili ostatniego pobrania (po pozycji): do ostrzeżenia przed wyjściem
   restore: null,      // kopia robocza tej samej sprawy z pamięci przeglądarki, czeka na decyzję
-  docsCollapsed: false,
+  confirmRerun: false,   // „Przetwórz ponownie” czeka na drugie kliknięcie (są poprawki)
+  confirmDocRetry: null, // „Przetwórz ten plik ponownie” czeka na drugie kliknięcie (pozycja)
+  retypeOpen: null,      // pozycja dokumentu z otwartym wyborem nowego typu
+  schemaSpecs: {},       // typ spoza fields.js → opis formularza zbudowany ze schematu (GET /api/document-types)
+  typeLabels: {},        // typ → nazwa wyświetlana z backendu (label), gdy jest
 };
 
 const viewers = new WeakMap(); // File → podgląd PDF (renderowany raz)
+
+/** Opis rubryk typu: trzy wbudowane z fields.js (ręcznie dobrana kolejność i podpowiedzi), inne ze schematu. */
+const specFor = (type) => DOC_TYPES[type] ?? state.schemaSpecs[type] ?? null;
+/** Nazwa typu: z fields.js, z `label` backendu, a w ostateczności sam identyfikator. */
+const typeLabel = (type) => DOC_TYPES[type]?.label ?? state.typeLabels[type] ?? state.schemaSpecs[type]?.label ?? type;
 let draftWritten = false;      // w tej sesji zapisano kopię roboczą bieżącej sprawy
 
 function readPref(key, fallback) {
@@ -88,24 +93,31 @@ const el = {
   mode: $("mode-select"), modeFlag: $("mode-flag"), title: $("page-title"),
   steps: $("steps"), main: $("main"),
   viewCase: $("view-case"), viewHelp: $("view-help"), viewTypes: $("view-types"),
+  intake: $("intake"), result: $("result"),
   form: $("upload-form"), drop: $("drop"), input: $("file-input"), folderInput: $("folder-input"),
-  fileLabel: $("file-label"),
   list: $("file-list"), actions: $("actions"), submit: $("submit-btn"), note: $("actions-note"),
-  retryFailed: $("retry-failed"), cancel: $("cancel-btn"), announcer: $("announcer"),
+  cancel: $("cancel-btn"), announcer: $("announcer"),
   message: $("request-message"), messageText: $("request-text"), retryRequest: $("retry-request"),
-  tally: $("tally"), sheet: $("sheet"), work: document.querySelector(".work"),
-  summary: $("summary"), downloadAll: $("download-all"), downloadAllLabel: $("download-all-label"),
-  typesList: $("types-list"), typesSource: $("types-source"),
-  docs: $("docs"), docsToggle: $("docs-toggle"), docsToggleLabel: $("docs-toggle-label"), docsMini: $("docs-mini"),
   restoreBox: $("restore-box"), restoreText: $("restore-text"), restoreYes: $("restore-yes"), restoreNo: $("restore-no"),
-  unsavedNote: $("unsaved-note"),
+  sheet: $("sheet"), work: document.querySelector(".work"),
+  typesList: $("types-list"), typesSource: $("types-source"),
+  // ekran 2: górny pasek (Pobierz ▾) i drugi pasek (Dokumenty ▾, ‹ › , Opcje ⋯)
+  downloadSplit: $("download-split"), downloadZip: $("download-zip"), downloadMore: $("download-more"),
+  downloadMenu: $("download-menu"), downloadZipItem: $("download-zip-item"), downloadZipNote: $("download-zip-note"),
+  downloadJson: $("download-json"), downloadJsonNote: $("download-json-note"), unsavedNote: $("unsaved-note"),
+  docsBtn: $("docs-btn"), docsBtnLabel: $("docs-btn-label"), docsPanel: $("docs-panel"), docList: $("doc-list"),
+  retryFailed: $("retry-failed"), resubmit: $("resubmit-btn"), tally: $("tally"), cancelRetry: $("cancel-retry"),
+  docPrev: $("doc-prev"), docNext: $("doc-next"), docPos: $("doc-pos"), docProgress: $("doc-progress"),
+  docOptions: $("doc-options"), docOptionsMenu: $("doc-options-menu"),
+  docRetry: $("doc-retry"), docRetryLabel: $("doc-retry-label"), docRetryNote: $("doc-retry-note"),
+  docPdfToggle: $("doc-pdf-toggle"), docPdfLabel: $("doc-pdf-label"),
+  docRetype: $("doc-retype"), docRevert: $("doc-revert"), docRevertNote: $("doc-revert-note"),
 };
 
 /* ---------- nawigacja ---------- */
 
 const NAV_KEY = "o2j-nav";
 const mobile = window.matchMedia("(max-width: 900px)");
-const narrow = window.matchMedia("(max-width: 1180px)");
 
 function setNav(collapsed) {
   el.app.dataset.nav = collapsed ? "collapsed" : "expanded";
@@ -165,7 +177,7 @@ function resetCase() {
   Object.assign(state, {
     caseName: null, files: [], urls: [], results: null, meta: null,
     notice: null, lastRun: null, selected: null, pending: false, pendingSet: null, abort: null, slow: false,
-    edits: [], active: null, saved: [], restore: null,
+    edits: [], active: null, saved: [], restore: null, confirmRerun: false, confirmDocRetry: null, retypeOpen: null,
   });
   draftWritten = false;
   el.input.value = "";
@@ -178,13 +190,13 @@ document.addEventListener("keydown", (event) => {
     el.menuBtn.focus();
     return;
   }
-  // ↑/↓ przełączają dokument, gdy fokus jest na liście plików
-  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.target.closest?.(".file-list")) {
+  // ↑/↓ przełączają dokument, gdy fokus jest na liście w panelu „Dokumenty”
+  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.target.closest?.(".doc-list")) {
     if (!state.files.length) return;
     event.preventDefault();
     const next = Math.min(state.files.length - 1, Math.max(0, (state.selected ?? 0) + (event.key === "ArrowDown" ? 1 : -1)));
     selectDocument(next);
-    el.list.querySelectorAll(".file-main")[next]?.focus();
+    el.docList.querySelectorAll(".doc-main")[next]?.focus();
   }
 });
 
@@ -202,6 +214,7 @@ el.mode.addEventListener("change", () => {
   else url.searchParams.delete("mock");
   history.replaceState(null, "", url);
   if (state.view === "types") loadTypes();
+  loadSchemas({ force: true });
   render();
 });
 
@@ -254,6 +267,12 @@ el.folderInput.addEventListener("change", () => {
 el.drop.addEventListener("drop", (event) => {
   if (!state.pending && event.dataTransfer?.files?.length) addFiles(event.dataTransfer.files);
 });
+// na ekranie wyniku pliki można upuścić na otwarty panel „Dokumenty” (zaczynają nową sprawę)
+el.docsPanel.addEventListener("dragover", (event) => event.preventDefault());
+el.docsPanel.addEventListener("drop", (event) => {
+  event.preventDefault();
+  if (!state.pending && event.dataTransfer?.files?.length) addFiles(event.dataTransfer.files);
+});
 window.addEventListener("dragover", (event) => event.preventDefault());
 window.addEventListener("drop", (event) => event.preventDefault());
 
@@ -271,6 +290,8 @@ function removeFile(index) {
 
 function selectDocument(index) {
   if (state.selected === index) return;
+  state.confirmDocRetry = null;
+  state.retypeOpen = null;
   state.selected = index;
   state.active = null;
   state.pdfFull = false;
@@ -281,24 +302,51 @@ function selectDocument(index) {
 
 /* ---------- wysyłka ---------- */
 
+/* „Przetwórz ponownie” zastępuje wyniki i kasuje ręczne poprawki: przy poprawkach pyta drugim kliknięciem */
+let rerunTimer = 0;
+const editedFieldCount = () => (state.results ?? []).reduce((sum, r, i) => sum + (r?.status === "ok" ? countEdits(i) : 0), 0);
 el.form.addEventListener("submit", (event) => {
   event.preventDefault();
   runExtraction(null);
 });
-el.retryFailed.addEventListener("click", () => runExtraction(failedPositions()));
+el.resubmit.addEventListener("click", () => {
+  if (state.pending) return;
+  if (state.results && !state.confirmRerun && editedFieldCount() > 0) {
+    state.confirmRerun = true;
+    clearTimeout(rerunTimer);
+    rerunTimer = setTimeout(() => { state.confirmRerun = false; render({ sheet: false }); }, 6000);
+    render({ sheet: false });
+    announce(el.resubmit.textContent);
+    return;
+  }
+  clearTimeout(rerunTimer);
+  state.confirmRerun = false;
+  closePopovers();
+  runExtraction(null);
+});
+el.retryFailed.addEventListener("click", () => { closePopovers({ focus: true }); runExtraction(failedPositions()); });
 el.retryRequest.addEventListener("click", () => runExtraction(state.lastRun));
 el.cancel.addEventListener("click", () => state.abort?.abort());
+el.cancelRetry.addEventListener("click", () => state.abort?.abort());
 
 el.restoreYes.addEventListener("click", restoreDraft);
 el.restoreNo.addEventListener("click", dropDraft);
 
-const failedPositions = () => (state.results ?? []).flatMap((r, i) => (r.status === "error" ? [i] : []));
+const failedPositions = () => (state.results ?? []).flatMap((r, i) => (r?.status === "error" ? [i] : []));
+
+/** Fokus jest „wolny”, gdy nikt niczego nie edytuje: nie zabieramy go z rubryki ani z panelu. */
+const focusIsFree = () => {
+  const a = document.activeElement;
+  return !a || a === document.body || a.hidden || !a.isConnected || !a.offsetParent
+    || el.actions.contains(a) || a === el.cancelRetry;
+};
 
 /**
- * Wysyła pliki do ekstrakcji. `positions` = null: cała sprawa (wyniki zastępowane),
- * tablica pozycji: tylko te pliki, a ich wpisy trafiają na swoje miejsca; reszta
- * wyników i ręczne poprawki zostają. Anulowanie albo błąd całego żądania
- * przywraca stan sprzed wysyłki.
+ * Wysyła pliki plik po pliku (każdy PDF osobnym POST /api/extract, najwyżej EXTRACT_CONCURRENCY naraz).
+ * `positions` = null: cała sprawa (wyniki zastępowane), tablica pozycji: tylko te pliki, a ich wpisy
+ * trafiają na swoje miejsca; reszta wyników i ręczne poprawki zostają. Każdy wynik jest pokazywany od razu,
+ * błąd jednego pliku nie zatrzymuje pozostałych. Anulowanie przerywa trwające żądania i kolejkę;
+ * gotowe wyniki zostają, a nieprzetworzone pliki dostają status błędu („Ponów błędne”).
  */
 async function runExtraction(positions) {
   if (state.pending) return;
@@ -308,87 +356,110 @@ async function runExtraction(positions) {
     return;
   }
   if (positions && (!state.results || positions.length === 0)) positions = null;
-  const files = positions ? positions.map((i) => state.files[i]) : [...state.files];
-  const before = { results: state.results, meta: state.meta, edits: state.edits };
+  const targets = positions ?? state.files.map((_, i) => i);
+  const files = targets.map((i) => state.files[i]);
+  const before = { results: state.results, meta: state.meta, edits: state.edits, saved: state.saved, selected: state.selected };
   const controller = new AbortController();
+  const fileState = [];
+  targets.forEach((i) => { fileState[i] = "queued"; });
   Object.assign(state, {
-    pending: true, pendingSet: positions ? new Set(positions) : null, abort: controller,
+    pending: true, pendingSet: new Set(targets), abort: controller, fileState,
     slow: false, notice: null, active: null, restore: null,   // przetwarzanie od nowa zamiast przywracania
   });
   if (!positions) Object.assign(state, { results: null, meta: null });
   hideInsertButton();
   render();
-  el.cancel.focus();   // przycisk „Przetwórz” jest teraz zablokowany, więc fokus nie może na nim zostać
+  (positions ? el.cancelRetry : el.cancel).focus();   // przycisk, którym zaczęto, jest teraz zablokowany
 
-  const extract = state.mode === "mock" ? extractWithMock : extractWithApi;
+  const extractOne = state.mode === "mock"
+    ? (file, opts) => extractWithMock([file], { ...opts, delayMs: 650 + Math.round(Math.random() * 500) })
+    : (file, opts) => extractWithApi([file], opts);
   const started = performance.now();
   const slowTimer = setTimeout(() => {
     if (state.abort !== controller) return;
     state.slow = true;
     render({ sheet: false });   // bez przebudowy arkusza: nie zabieramy fokusu z rubryki
   }, 8000);
-  let outcome;
-  try {
-    outcome = await extract(files, { signal: controller.signal });
-    if (controller.signal.aborted) throw new DOMException("Przerwano", "AbortError");
-  } catch (error) {
-    outcome = { error };
-  }
+  let first = !positions;   // pierwszy wynik całej sprawy otwiera ekran wyniku
+  let meta = null;
+
+  const outcome = await extractEach(files, {
+    extractOne,
+    signal: controller.signal,
+    onStart: (k) => {
+      if (state.abort !== controller) return;
+      state.fileState[targets[k]] = "running";
+      render({ sheet: false });
+    },
+    onResult: (k, entry, m) => {
+      if (state.abort !== controller) return;
+      const pos = targets[k];
+      meta ??= m;
+      const free = focusIsFree();
+      delete state.fileState[pos];
+      if (first) {
+        // pierwszy gotowy dokument: ekran wyniku, wcześniejsze poprawki przepadają (jak dotąd przy „Przetwórz ponownie”)
+        first = false;
+        Object.assign(state, { results: state.files.map(() => null), edits: [], saved: [], selected: pos });
+      }
+      state.results[pos] = entry;
+      if (entry.status === "ok" && !specFor(entry.type)) loadSchemas({ force: true });
+      delete state.edits[pos];
+      delete state.saved[pos];
+      // arkusz przebudowujemy tylko dla dokumentu, który właśnie się otworzył albo jest wybrany
+      render({ sheet: pos === state.selected });
+      if (free && !el.result.hidden && (!document.activeElement || document.activeElement === document.body || !document.activeElement.offsetParent)) el.docsBtn.focus();
+      const sum = docsSummary(state.files.map((_, i) => statusAt(i)));
+      announce(`${entry.filename}: ${entry.status === "ok" ? typeLabel(entry.type) : STATUS[entry.status]?.text ?? entry.status}. ${sum.progress ?? ""}`);
+    },
+  });
   clearTimeout(slowTimer);
   if (state.abort !== controller) return;   // w międzyczasie zaczęto nową sprawę
 
-  const focusWasHere = !document.activeElement || document.activeElement === document.body
-    || el.actions.contains(document.activeElement);
-  Object.assign(state, { pending: false, pendingSet: null, abort: null, slow: false });
-  let focusTarget = el.submit;
+  const free = focusIsFree();
+  const seconds = (performance.now() - started) / 1000;
+  Object.assign(state, { pending: false, pendingSet: null, abort: null, slow: false, fileState: [] });
 
-  if (outcome.error) {
-    const { error } = outcome;
-    if (!positions) Object.assign(state, before);
-    if (controller.signal.aborted || error?.name === "AbortError") {
+  if (outcome.aborted && !state.results) {
+    // nic jeszcze nie przyszło: wracamy do stanu sprzed wysyłki
+    Object.assign(state, before);
+    state.notice = {
+      kind: "info", retry: false,
+      text: state.results
+        ? "Przetwarzanie anulowane. Wcześniejsze wyniki i poprawki zostały bez zmian."
+        : "Przetwarzanie anulowane. Pliki zostały na liście, możesz je przetworzyć ponownie.",
+    };
+  } else {
+    let missing = 0;
+    targets.forEach((pos, k) => {
+      if (outcome.documents[k]) return;
+      // przerwane przed wynikiem: przy ponawianiu zostaje poprzedni wpis, przy całej sprawie plik ma błąd do ponowienia
+      if (positions && before.results?.[pos]) { state.results[pos] = before.results[pos]; return; }
+      missing += 1;
+      state.results[pos] = {
+        filename: state.files[pos].name, status: "error", type: null, data: null,
+        error: { code: "cancelled", message: "Przetwarzanie przerwane przed wynikiem." },
+      };
+    });
+    state.meta = positions ? { ...state.meta, ...(meta ?? {}), seconds } : { ...(meta ?? {}), seconds };
+    state.lastRun = null;
+    const done = outcome.documents.filter(Boolean);
+    if (outcome.aborted) {
       state.notice = {
         kind: "info", retry: false,
-        text: positions
-          ? "Ponawianie anulowane. Wyniki i poprawki zostały bez zmian."
-          : state.results
-            ? "Przetwarzanie anulowane. Wcześniejsze wyniki i poprawki zostały bez zmian."
-            : "Przetwarzanie anulowane. Pliki zostały na liście, możesz je przetworzyć ponownie.",
+        text: `Przetwarzanie anulowane: gotowe ${done.length} z ${targets.length}. ${missing ? "Pozostałe pliki przetworzysz przyciskiem „Ponów błędne” w panelu „Dokumenty”." : "Wcześniejsze wyniki zostały bez zmian."}`,
       };
-    } else {
-      const known = error instanceof ApiError;
-      if (!known) console.error(error);
-      const retry = !known || error.kind !== "invalid_request";
-      // „…nie powiodło się. (HTTP 502)” → „…nie powiodło się (HTTP 502).”
-      const text = known ? error.message.replace(/\.?\s*\((HTTP \d+)\)$/, " ($1).") : "Nieoczekiwany błąd aplikacji.";
-      state.notice = {
-        kind: "error", retry,
-        text: retry ? `${text} Pliki${state.results ? ", wyniki i poprawki" : ""} zostały bez zmian.` : text,
-      };
-      state.lastRun = positions;
-      if (retry) focusTarget = el.retryRequest;
+    } else if (done.length && done.every((d) => d.error?.code === "network_error")) {
+      state.notice = { kind: "error", retry: false, text: "Brak połączenia z serwerem. Sprawdź, czy backend działa, i użyj „Ponów błędne” w panelu „Dokumenty”." };
     }
-  } else {
-    const { documents, meta } = outcome;
-    const seconds = (performance.now() - started) / 1000;
-    if (positions) {
-      const results = [...state.results];
-      const edits = [...state.edits];
-      positions.forEach((pos, k) => { results[pos] = documents[k]; delete edits[pos]; delete state.saved[pos]; });
-      Object.assign(state, { results, edits, meta: { ...state.meta, ...meta, seconds } });
-    } else {
-      Object.assign(state, { results: documents, edits: [], saved: [], meta: { ...meta, seconds } });
-      makeRoomForResults();
-      const firstOk = documents.findIndex((r) => r.status === "ok");
-      state.selected = firstOk >= 0 ? firstOk : 0;
-    }
-    state.lastRun = null;
-    announce(`${positions ? "Ponowiono" : "Przetworzono"} ${documents.length} ${plural(documents.length, "plik", "pliki", "plików")}. ${tallyText(documents)}`);
-    focusTarget = failedPositions().length ? el.retryFailed : null;
+    announce(`${positions ? "Ponowiono" : "Przetworzono"} ${done.length} ${plural(done.length, "plik", "pliki", "plików")}. ${tallyText(done)}`);
   }
-  // przy ponawianiu arkusz innego dokumentu zostaje, żeby nie przerywać wpisywania
-  render({ sheet: !positions || positions.includes(state.selected) });
+  // arkusz wybranego dokumentu był już zbudowany, gdy przyszedł jego wynik: przebudowa zabrałaby fokus z rubryki
+  const sheetStale = !state.results || state.selected === null
+    || targets.some((pos, k) => pos === state.selected && !outcome.documents[k]);
+  render({ sheet: sheetStale });
   scheduleDraftSave();
-  if (focusWasHere) (focusTarget ?? el.list.querySelectorAll(".file-main")[state.selected] ?? el.submit).focus();
+  if (free) ((state.results ? el.docsBtn : el.submit)).focus();
 }
 
 function tallyText(documents) {
@@ -407,9 +478,14 @@ function announce(text) {
 /* ---------- render ---------- */
 
 function statusAt(index) {
-  if (state.pending && (!state.pendingSet || state.pendingSet.has(index))) return "pending";
+  const run = state.pending ? state.fileState?.[index] : null;
+  if (run === "queued") return "queued";
+  if (run === "running") return "pending";
   return state.results?.[index]?.status ?? "selected";
 }
+
+/** Ekran 1 (wgrywanie i przetwarzanie całości) albo ekran 2 (wynik sprawy). */
+const screenNow = () => (state.results ? "result" : "intake");
 
 function render({ sheet = true } = {}) {
   el.viewCase.hidden = state.view !== "case";
@@ -420,13 +496,20 @@ function render({ sheet = true } = {}) {
     if (b.dataset.view === state.view) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   });
+  const screen = screenNow();
+  el.viewCase.dataset.screen = screen;
+  el.intake.hidden = screen !== "intake";
+  el.result.hidden = screen !== "result";
+  if (screen !== "result") closePopovers();
   el.modeFlag.hidden = state.mode !== "mock";
   el.title.textContent = state.view === "help" ? "Instrukcja"
     : state.view === "types" ? "Typy dokumentów"
     : state.caseName ? `Sprawa: ${state.caseName}` : "Sprawa odwoławcza";
-  el.steps.hidden = state.view !== "case";   // kroki dotyczą tylko pracy ze sprawą
+  // kroki tylko na ekranie wgrywania i w trakcie przetwarzania; pobieranie tylko na ekranie wyniku
+  el.steps.hidden = state.view !== "case" || screen !== "intake";
+  el.downloadSplit.hidden = state.view !== "case" || screen !== "result";
 
-  const step = state.results ? 3 : state.files.length ? 2 : 1;
+  const step = state.pending ? 2 : state.files.length ? 2 : 1;
   el.steps.querySelectorAll("li").forEach((li) => {
     const n = Number(li.dataset.step);
     li.dataset.state = n < step ? "done" : n === step ? "current" : "todo";
@@ -437,8 +520,7 @@ function render({ sheet = true } = {}) {
   el.input.disabled = state.pending;
   el.folderInput.disabled = state.pending;
   el.drop.dataset.compact = String(state.files.length > 0);
-  el.drop.querySelector(".drop-title").textContent = state.files.length ? "Dodaj:" : "Przeciągnij tutaj pliki PDF";
-  el.fileLabel.textContent = state.files.length ? "Pliki" : "Wybierz pliki z dysku";
+  el.drop.dataset.busy = String(state.pending);
   const notice = state.notice;
   el.message.hidden = !notice;
   el.message.dataset.kind = notice?.kind ?? "error";
@@ -448,105 +530,62 @@ function render({ sheet = true } = {}) {
   if (state.restore) el.restoreText.textContent = `W tej przeglądarce jest kopia robocza tej sprawy: ${describeDraft(state.restore.draft)}. Przywrócenie wczyta zapisane wyniki i poprawki bez ponownego przetwarzania.`;
   el.actions.hidden = state.files.length === 0;
   el.submit.disabled = state.pending;
-  el.submit.classList.toggle("btn-line", Boolean(state.results || state.restore));   // przy pytaniu o kopię główną akcją jest „Przywróć”
+  el.submit.classList.toggle("btn-line", Boolean(state.restore));   // przy pytaniu o kopię główną akcją jest „Przywróć”
   const n = state.files.length;
-  el.submit.textContent = state.pending
-    ? (state.pendingSet ? "Ponawianie…" : "Przetwarzanie…")
-    : state.results ? "Przetwórz ponownie" : `Przetwórz ${n} ${plural(n, "plik", "pliki", "plików")}`;
+  el.submit.textContent = state.pending ? "Przetwarzanie…" : `Przetwórz ${n} ${plural(n, "plik", "pliki", "plików")}`;
+  el.cancel.hidden = !(state.pending && screen === "intake");
+  el.cancelRetry.hidden = !(state.pending && screen === "result");
+  const progress = state.pending ? docsSummary(state.files.map((_, i) => statusAt(i))).progress : "";
+  el.note.textContent = !state.pending ? ""
+    : state.slow ? `${progress}. To trwa dłużej niż zwykle. Model wciąż czyta dokumenty. Możesz poczekać albo anulować.`
+    : `${progress}. Każdy plik jest wysyłany osobno; wynik pojawi się od razu, gdy będzie gotowy.`;
+
+  // panel „Dokumenty”: ponawianie i przetwarzanie od nowa
   const failed = state.pending ? 0 : failedPositions().length;
   el.retryFailed.hidden = failed === 0;
   el.retryFailed.textContent = `Ponów błędne (${failed})`;
-  el.cancel.hidden = !state.pending;
-  el.note.textContent = !state.pending ? ""
-    : state.slow ? "To trwa dłużej niż zwykle. Model wciąż czyta dokumenty. Możesz poczekać albo anulować."
-    : state.pendingSet ? `Ponowne przetwarzanie: ${state.pendingSet.size} ${plural(state.pendingSet.size, "plik", "pliki", "plików")} z błędem.`
-    : "System rozpoznaje typ każdego dokumentu po treści i wyciąga dane.";
+  el.resubmit.disabled = state.pending;
+  el.resubmit.textContent = state.results && state.confirmRerun
+    ? `Kliknij jeszcze raz: usunie poprawki (${editedFieldCount()})`
+    : "Przetwórz ponownie";
+  el.resubmit.dataset.confirm = String(Boolean(state.confirmRerun));
 
-  renderDocsToggle();
   renderList();
+  renderDocbar();
   renderSummary();
   if (sheet) renderSheet();
 }
 
+/** Ikona statusu + tekst (kolor tylko w ikonie, status nigdy samym kolorem). */
+function statusNode(status, entry, className = "badge") {
+  const info = STATUS[status] ?? STATUS.selected;
+  const span = node("span", `${className} badge-${status}`);
+  span.innerHTML = `<svg class="ic" aria-hidden="true"><use href="#i-${info.icon}"/></svg>`;
+  span.append(status === "ok" ? typeLabel(entry.type) : info.text);
+  return span;
+}
+const badgeFor = (status, entry) => statusNode(status, entry);
+
 function renderList() {
   el.list.replaceChildren(...state.files.map(renderFileRow));
-  el.docsMini.replaceChildren(...state.files.map(renderMiniRow));
+  el.docList.replaceChildren(...(state.results ? state.files.map(renderDocRow) : []));
 }
 
-/* zwijana kolumna „Dokumenty sprawy” (tylko na komputerze, gdy są pliki): więcej miejsca na rubryki i PDF */
-const DOCS_KEY = "o2j-docs";
-state.docsCollapsed = readPref(DOCS_KEY, "expanded") === "collapsed";
-el.docsToggle.addEventListener("click", () => {
-  state.docsCollapsed = !state.docsCollapsed;
-  try { localStorage.setItem(DOCS_KEY, state.docsCollapsed ? "collapsed" : "expanded"); } catch { /* bez pamięci */ }
-  render({ sheet: false });
-  el.docsToggle.focus();
-});
-
-function renderDocsToggle() {
-  const collapsed = state.docsCollapsed && state.files.length > 0;
-  el.viewCase.dataset.docs = collapsed ? "collapsed" : "expanded";
-  el.docsToggle.hidden = state.files.length === 0;
-  el.docsToggle.setAttribute("aria-expanded", String(!collapsed));
-  const label = collapsed ? "Rozwiń listę dokumentów" : "Zwiń listę dokumentów";
-  el.docsToggleLabel.textContent = label;
-  el.docsToggle.title = label;
-  el.docsMini.hidden = !collapsed;
-}
-
-function renderMiniRow(file, index) {
-  const status = statusAt(index);
-  const entry = state.results?.[index];
-  const what = status === "ok" ? typeLabel(entry.type) : STATUS_TEXT[status];
-  const edited = entry?.status === "ok" && countEdits(index) ? ", poprawiony" : "";
-  const li = document.createElement("li");
-  const b = node("button", "docs-mini-btn", String(index + 1));
-  b.type = "button";
-  b.dataset.status = status;
-  b.dataset.current = String(index === state.selected);
-  b.setAttribute("aria-current", String(index === state.selected));
-  b.setAttribute("aria-label", `Pozycja ${index + 1}: ${file.name}, ${what}${edited}`);
-  b.title = `${file.name}: ${what}${edited}`;
-  if (edited) b.dataset.edited = "true";
-  b.addEventListener("click", () => selectDocument(index));
-  li.append(b);
-  return li;
-}
-
+/** Ekran 1: nr, nazwa, rozmiar, × (w trakcie przetwarzania zamiast × status). */
 function renderFileRow(file, index) {
   const status = statusAt(index);
-  const entry = state.results?.[index];
-  const li = document.createElement("li");
-  li.className = "file-row";
-  li.dataset.current = String(index === state.selected);
-
+  const li = node("li", "file-row");
   const pos = node("span", "file-pos", String(index + 1));
   pos.setAttribute("aria-hidden", "true");
-
-  const main = document.createElement("button");
-  main.type = "button";
-  main.className = "file-main";
-  main.setAttribute("aria-current", String(index === state.selected));
-  main.addEventListener("click", () => {
-    selectDocument(index);
-    if (narrow.matches) el.sheet.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-  const meta = node("span", "file-meta");
-  if (status !== "selected") meta.append(badgeFor(status, entry));
-  if (entry?.status === "ok") {
-    const c = completeness(entry, dataAt(index));
-    if (c) meta.append(node("span", null, `${c.filled}/${c.total} pól`));
-    if (countEdits(index)) meta.append(node("span", "file-edited", "poprawiony"));
-  } else {
-    meta.append(node("span", null, formatSize(file.size)));
-  }
-  main.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "file-name", file.name), meta);
-  li.append(pos, main);
-
-  if (!state.results && !state.pending) {
-    const remove = document.createElement("button");
+  const main = node("div", "file-main");
+  main.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "file-name", file.name));
+  const meta = node("span", "file-meta", formatSize(file.size));
+  li.append(pos, main, meta);
+  if (status === "pending" || status === "queued") {
+    li.append(statusNode(status, null, "badge file-state"));
+  } else if (!state.pending) {
+    const remove = node("button", "file-remove");
     remove.type = "button";
-    remove.className = "file-remove";
     remove.setAttribute("aria-label", `Usuń ${file.name} z listy`);
     remove.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>';
     remove.addEventListener("click", () => removeFile(index));
@@ -555,22 +594,173 @@ function renderFileRow(file, index) {
   return li;
 }
 
-function badgeFor(status, entry) {
-  if (status === "ok") return node("span", "badge badge-ok", typeLabel(entry.type));
-  return node("span", `badge badge-${status}`, STATUS_TEXT[status]);
+/** Ekran 2, panel „Dokumenty”: wybór dokumentu, status, wypełnienie, poprawki. */
+function renderDocRow(file, index) {
+  const status = statusAt(index);
+  const entry = state.results?.[index];
+  const li = node("li", "doc-row");
+  li.dataset.current = String(index === state.selected);
+  const b = node("button", "doc-main");
+  b.type = "button";
+  b.setAttribute("aria-current", String(index === state.selected));
+  const pos = node("span", "doc-pos", String(index + 1));
+  pos.setAttribute("aria-hidden", "true");
+  const text = node("span", "doc-text");
+  const meta = node("span", "doc-meta");
+  meta.append(statusNode(status, entry));
+  if (entry?.status === "ok") {
+    const c = completeness(entry, dataAt(index));
+    if (c) meta.append(node("span", null, `${c.filled}/${c.total} pól`));
+    const edits = countEdits(index);
+    if (entry.manualType) meta.append(node("span", "doc-edited", "typ ręcznie"));
+    if (edits) meta.append(node("span", "doc-edited", `${edits} ${plural(edits, "poprawka", "poprawki", "poprawek")}`));
+  }
+  text.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "doc-name", file.name), meta);
+  b.append(pos, text);
+  b.addEventListener("click", () => {
+    selectDocument(index);
+    closePopovers({ focus: true });
+  });
+  li.append(b);
+  return li;
 }
 
-/* ---------- podsumowanie sprawy ---------- */
+/* ---------- drugi pasek: Dokumenty ▾, ‹ nazwa · 1 z 5 ›, wypełnienie, ⋯ ---------- */
+
+function renderDocbar() {
+  if (!state.results) return;
+  const statuses = state.files.map((_, i) => statusAt(i));
+  const sum = docsSummary(statuses);
+  el.docsBtnLabel.replaceChildren(`Dokumenty ${sum.count}`);
+  if (sum.attention) {
+    // informacja o błędach widoczna także przy zamkniętym panelu: tekst, ikona tylko jako dodatek
+    const att = node("span", `docbar-attention${sum.alert ? " is-alert" : ""}`);
+    att.append(node("span", "docbar-sep", "·"));
+    if (sum.alert) att.insertAdjacentHTML("beforeend", '<svg class="ic ic-sm" aria-hidden="true"><use href="#i-error"/></svg>');
+    att.append(sum.attention);
+    el.docsBtnLabel.append(att);
+  }
+  const index = state.selected ?? 0;
+  const file = state.files[index];
+  const entry = state.results[index];
+  el.docPos.textContent = file ? positionText(file.name, index, state.files.length) : "";
+  el.docPrev.disabled = index <= 0;
+  el.docNext.disabled = index >= state.files.length - 1;
+  const c = entry?.status === "ok" ? completeness(entry, dataAt(index)) : null;
+  el.docProgress.textContent = entry?.status === "ok" ? progressText(c, countEdits(index)) : "";
+  // ⋯ Opcje dokumentu
+  const edits = entry?.status === "ok" ? countEdits(index) : 0;
+  el.docRetry.disabled = state.pending;
+  el.docRetryLabel.textContent = state.confirmDocRetry === index
+    ? `Kliknij jeszcze raz: usunie poprawki (${edits})`
+    : "Przetwórz ten plik ponownie";
+  el.docRetryNote.textContent = edits && state.confirmDocRetry !== index ? "poprawki w tym pliku przepadną" : "";
+  el.docPdfLabel.textContent = state.showPdf ? "Ukryj podgląd PDF" : "Pokaż podgląd PDF";
+  el.docRetype.hidden = entry?.status !== "ok";
+  el.docRetype.disabled = state.pending;
+  el.docRevert.hidden = !entry?.manualType;
+  el.docRevertNote.textContent = entry?.previous
+    ? (entry.previous.status === "ok" ? `typ od modelu: ${typeLabel(entry.previous.type)}` : "model nie rozpoznał typu")
+    : "";
+}
+
+el.docPrev.addEventListener("click", () => selectDocument(Math.max(0, (state.selected ?? 0) - 1)));
+el.docNext.addEventListener("click", () => selectDocument(Math.min(state.files.length - 1, (state.selected ?? 0) + 1)));
+
+let docRetryTimer = 0;
+el.docRetry.addEventListener("click", () => {
+  const index = state.selected;
+  if (index === null || state.pending) return;
+  const edits = state.results?.[index]?.status === "ok" ? countEdits(index) : 0;
+  if (edits && state.confirmDocRetry !== index) {
+    state.confirmDocRetry = index;
+    clearTimeout(docRetryTimer);
+    docRetryTimer = setTimeout(() => { state.confirmDocRetry = null; renderDocbar(); }, 6000);
+    renderDocbar();
+    announce(el.docRetryLabel.textContent);
+    return;
+  }
+  state.confirmDocRetry = null;
+  closePopovers({ focus: true });
+  runExtraction([index]);
+});
+el.docRetype.addEventListener("click", () => {
+  state.retypeOpen = state.selected;
+  closePopovers();
+  renderSheet();
+  el.sheet.querySelector(".retype select")?.focus();
+});
+el.docRevert.addEventListener("click", () => {
+  closePopovers({ focus: true });
+  revertManualType(state.selected);
+});
+el.docPdfToggle.addEventListener("click", () => {
+  state.showPdf = !state.showPdf;
+  try { localStorage.setItem("o2j-pdf", state.showPdf ? "1" : "0"); } catch { /* bez pamięci */ }
+  closePopovers({ focus: true });
+  renderDocbar();
+  renderSheet();
+});
+
+/* ---------- panele rozwijane pod przyciskiem (Dokumenty, Pobierz, Opcje) ----------
+   Esc i kliknięcie obok zamykają panel, fokus wraca do przycisku. */
+
+const POPOVERS = [];
+function popover(trigger, panel, { onOpen } = {}) {
+  const p = { trigger, panel };
+  p.open = () => {
+    closePopovers();
+    panel.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    onOpen?.();
+  };
+  p.close = (focus = false) => {
+    if (panel.hidden) return;
+    panel.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (focus) trigger.focus();
+  };
+  trigger.addEventListener("click", () => (panel.hidden ? p.open() : p.close()));
+  POPOVERS.push(p);
+  return p;
+}
+function closePopovers({ focus = false } = {}) {
+  POPOVERS.forEach((p) => p.close(focus && !p.panel.hidden));
+}
+const openPopover = () => POPOVERS.find((p) => !p.panel.hidden);
+
+popover(el.docsBtn, el.docsPanel, {
+  onOpen: () => (el.docList.querySelector('[aria-current="true"]') ?? el.docList.querySelector("button"))?.focus(),
+});
+popover(el.downloadMore, el.downloadMenu, { onOpen: () => el.downloadZipItem.focus() });
+popover(el.docOptions, el.docOptionsMenu, { onOpen: () => el.docRetry.focus() });
+
+document.addEventListener("pointerdown", (event) => {
+  const p = openPopover();
+  if (p && !p.panel.contains(event.target) && !p.trigger.contains(event.target)) p.close();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const p = openPopover();
+  if (!p) return;
+  event.stopImmediatePropagation();
+  p.close(true);
+}, true);
+
+/* ---------- podsumowanie sprawy i pobieranie ---------- */
 
 function renderSummary() {
-  el.summary.hidden = !state.results;
-  if (!state.results) return;
+  if (!state.results) {
+    el.tally.replaceChildren();
+    el.unsavedNote.hidden = true;
+    return;
+  }
   const byType = new Map();
-  for (const r of state.results) if (r.status === "ok") byType.set(r.type, (byType.get(r.type) ?? 0) + 1);
+  for (const r of state.results) if (r?.status === "ok") byType.set(r.type, (byType.get(r.type) ?? 0) + 1);
   const order = [...Object.keys(DOC_TYPES), ...[...byType.keys()].filter((t) => !DOC_TYPES[t])];
   const rows = order.map((type) => [typeLabel(type), byType.get(type) ?? 0, !byType.get(type)]);
-  const unknown = state.results.filter((r) => r.status === "unknown").length;
-  const errors = state.results.filter((r) => r.status === "error").length;
+  const unknown = state.results.filter((r) => r?.status === "unknown").length;
+  const errors = state.results.filter((r) => r?.status === "error").length;
   if (unknown) rows.push(["Nie rozpoznano", unknown, false]);
   if (errors) rows.push(["Błędy", errors, false]);
   const items = rows.map(([label, count, muted]) => {
@@ -590,153 +780,227 @@ function renderSummary() {
   el.tally.replaceChildren(...items);
 
   const files = resultFiles();
-  el.downloadAll.hidden = files.length === 0;
-  el.downloadAllLabel.textContent = `Pobierz wyniki (ZIP, ${files.length} ${plural(files.length, "plik", "pliki", "plików")})`;
+  const zipText = `${files.length} ${plural(files.length, "plik", "pliki", "plików")} JSON`;
+  el.downloadZip.disabled = files.length === 0 || state.pending;
+  el.downloadZipItem.disabled = el.downloadZip.disabled;
+  const waiting = state.pending ? state.files.filter((_, i) => ["queued", "pending"].includes(statusAt(i))).length : 0;
+  el.downloadZipNote.textContent = waiting
+    ? `ZIP po zakończeniu: czeka jeszcze ${waiting} ${plural(waiting, "plik", "pliki", "plików")}`
+    : files.length ? `${safeName(state.caseName ?? "sprawa")}.zip · ${zipText}` : "brak plików do pobrania";
+  el.downloadZip.title = waiting ? el.downloadZipNote.textContent
+    : `Pobierz ZIP całej sprawy (${zipText})${unsaved().length ? ". Są niepobrane poprawki." : ""}`;
+  const index = state.selected;
+  const entry = index !== null ? state.results[index] : null;
+  el.downloadJson.disabled = entry?.status !== "ok";
+  el.downloadJsonNote.textContent = entry?.status === "ok" ? jsonName(state.files[index].name)
+    : entry?.status === "unknown" ? "nierozpoznany: w ZIP-ie jako {}" : "ten plik nie ma danych";
   const open = unsaved().length;
+  el.downloadSplit.dataset.unsaved = String(open > 0);
   el.unsavedNote.hidden = !open;
   el.unsavedNote.textContent = open
     ? `Poprawki w ${open} ${plural(open, "dokumencie", "dokumentach", "dokumentach")} nie są jeszcze pobrane. Kopia robocza zostaje w tej przeglądarce.`
     : "";
 }
 
-/** Pliki wynikowe jak w output/<sprawa>/: JSON dla rozpoznanych, `{}` dla nierozpoznanych (wymóg UZP). */
+/** Pliki wynikowe jak w output/<sprawa>/ (export.js): JSON dla rozpoznanych, `{}` dla nierozpoznanych. */
 function resultFiles() {
-  if (!state.results) return [];
-  const folder = safeName(state.caseName ?? "sprawa");
-  const used = new Set();
-  const files = [];
-  state.results.forEach((r, i) => {
-    if (r.status !== "ok" && r.status !== "unknown") return;   // błąd: brak pliku, jak w CLI
-    let name = jsonName(state.files[i].name);
-    for (let k = 2; used.has(name); k++) name = jsonName(state.files[i].name).replace(/\.json$/, ` (${k}).json`);
-    used.add(name);
-    files.push({ name: `${folder}/${name}`, text: r.status === "ok" ? `${JSON.stringify(dataAt(i), null, 2)}\n` : "{}" });
-  });
-  return files;
+  return buildResultFiles({ files: state.files, results: state.results, dataAt, caseName: state.caseName });
 }
 
-el.downloadAll.addEventListener("click", () => {
+function downloadZip() {
   const files = resultFiles();
   if (!files.length) return;
   downloadBlob(`${safeName(state.caseName ?? "sprawa")}.zip`, zipStore(files));
   markSaved(state.results.map((_, i) => i));
+}
+el.downloadZip.addEventListener("click", downloadZip);
+el.downloadZipItem.addEventListener("click", () => { closePopovers({ focus: true }); downloadZip(); });
+el.downloadJson.addEventListener("click", () => {
+  const index = state.selected;
+  if (index === null || state.results?.[index]?.status !== "ok") return;
+  closePopovers({ focus: true });
+  downloadJson(state.files[index].name, dataAt(index));
+  markSaved([index]);
 });
 
-/* ---------- arkusz ---------- */
+/* ---------- arkusz: formularz | PDF ---------- */
 
 function renderSheet() {
   const index = state.selected;
   const file = index !== null ? state.files[index] : null;
-
-  if (!file) {
-    el.sheet.dataset.layout = "guide";
-    el.sheet.replaceChildren(emptyGuide());
+  if (!file || !state.results) {
+    el.sheet.replaceChildren();
     return;
   }
 
-  const entry = state.results?.[index];
-  const head = node("div", "sheet-head");
-  const titleRow = node("div", "sheet-title-row");
-  const title = fileNameNode("h2", "sheet-title", file.name);
+  const entry = state.results[index];
+  const status = statusAt(index);
+  const head = node("div", "col-head");
+  const title = node("h2", "col-title");
   title.id = "sheet-heading";
-  titleRow.append(title);
-  const pending = statusAt(index) === "pending";
-  if (entry || pending) titleRow.append(badgeFor(statusAt(index), entry));
-  head.append(titleRow);
+  title.append(node("span", "sr-only", `${file.name}: `));
 
   let left;
-  if (pending) {
+  if (status === "pending" || status === "queued" || !entry) {
+    title.append(statusNode(status === "queued" ? "queued" : "pending", entry, "col-status"));
     left = node("div", "skeleton");
     for (let i = 0; i < 8; i++) left.append(node("div"));
     left.append(node("p", "sr-only", "Trwa przetwarzanie dokumentu."));
-  } else if (!entry) {
-    left = stateBlock("Plik czeka na przetworzenie",
-      ["Dodaj pozostałe dokumenty sprawy i kliknij „Przetwórz”. Dane tego pliku pojawią się w tym miejscu."]);
+    head.append(title);
   } else if (entry.status === "unknown") {
+    title.append(statusNode("unknown", entry, "col-status"));
+    head.append(title);
     left = stateBlock("Nie rozpoznano typu dokumentu", [
-      "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie plik JSON z samym {}, zgodnie z wymogiem UZP.",
-      "Jeśli to jednak jeden z tych dokumentów, sprawdź w podglądzie, czy PDF jest kompletny i czytelny.",
+      "Model nie rozpoznał typu. Jeśli to jeden z obsługiwanych dokumentów, wybierz typ:",
     ]);
+    left.append(typePicker(index, null), node("p", "state-note",
+      "Bez wyboru typu plik trafi do wyników sprawy jako JSON z samym {}, zgodnie z wymogiem UZP."));
   } else if (entry.status === "error") {
+    title.append(statusNode("error", entry, "col-status"));
+    head.append(title);
+    // skanu bez OCR nie naprawi ponowienie, więc nie obiecujemy tego
+    const ocr = entry.error?.code === "ocr_required";
     left = stateBlock("Nie udało się przetworzyć pliku", [
       entry.error?.message ?? "Wystąpił błąd podczas odczytu dokumentu.",
-      "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników, dopóki nie uda się go przetworzyć: spróbuj ponownie przyciskiem „Ponów błędne”.",
+      ocr
+        ? "To skan bez warstwy tekstu, a serwer nie odczytał go przez OCR. Pozostałe pliki sprawy są dostępne; dane z tego pisma trzeba wprowadzić ręcznie albo wgrać PDF z tekstem."
+        : "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników, dopóki nie uda się go przetworzyć: użyj „Ponów błędne” w panelu „Dokumenty”.",
     ]);
     if (entry.error?.code) left.append(node("p", "state-code", `Kod błędu: ${entry.error.code}`));
   } else {
-    head.append(sheetTools(index, file), sheetInfo(index, entry));
+    title.append(typeLabel(entry.type));
+    if (entry.manualType) title.append(node("span", "col-manual", "typ ustawiony ręcznie"));
+    head.append(title, sheetModeSwitch());
     left = state.sheetMode === "json" ? jsonView(dataAt(index)) : fieldsView(index, entry);
+    if (state.sheetMode === "fields") {
+      head.append(node("p", "col-hint", state.showPdf
+        ? "Wpisuj wprost w rubryki albo zaznacz tekst w PDF-ie i wstaw go do rubryki (z klawiatury: Alt+↓ w rubryce)."
+        : "Wpisuj wprost w rubryki."));
+    }
   }
 
   const body = node("div", "sheet-body");
   const pane = node("div", "fields-pane");
+  pane.append(head);
+  if (state.retypeOpen === index && entry?.status === "ok") pane.append(retypePanel(index, entry));
   pane.append(left);
   body.dataset.pdf = String(state.showPdf);
   body.dataset.full = String(state.showPdf && state.pdfFull);
   body.style.setProperty("--split", `${state.split}%`);
   if (state.showPdf) body.append(pane, splitter(body), pdfPane(index));
   else body.append(pane);
-  el.sheet.dataset.layout = "doc";
-  el.sheet.replaceChildren(head, body);
+  el.sheet.replaceChildren(body);
 }
 
-function sheetTools(index, file) {
-  const tools = node("div", "sheet-tools");
+/* ---------- ręczna zmiana typu dokumentu ---------- */
+
+/** Typy, które da się ustawić ręcznie: znane panelowi (fields.js) i ze schematów backendu. */
+function manualTypes() {
+  return [...Object.entries(DOC_TYPES), ...Object.entries(state.schemaSpecs)].map(([id, t]) => ({ id, label: typeLabel(id) ?? t.label }));
+}
+
+/** Lista typów i przycisk. `current` = typ, którego nie proponujemy (bieżący). */
+function typePicker(index, current, { confirmText = "Otwórz formularz", onCancel = null } = {}) {
+  const wrap = node("div", "type-pick");
+  const id = `type-pick-${index}`;
+  const label = node("label", "type-pick-label", "Typ dokumentu");
+  label.htmlFor = id;
+  const select = node("select", "wiz-in type-pick-select");
+  select.id = id;
+  select.append(Object.assign(node("option", null, "— wybierz —"), { value: "" }));
+  for (const t of manualTypes().filter((t) => t.id !== current)) select.append(Object.assign(node("option", null, t.label), { value: t.id }));
+  const go = node("button", "btn btn-line btn-sm", confirmText);
+  go.type = "button";
+  go.disabled = true;
+  select.addEventListener("change", () => { go.disabled = !select.value; });
+  go.addEventListener("click", () => select.value && setManualType(index, select.value));
+  const row = node("div", "type-pick-row");
+  row.append(select, go);
+  if (onCancel) {
+    const cancel = node("button", "link-btn", "Anuluj");
+    cancel.type = "button";
+    cancel.addEventListener("click", onCancel);
+    row.append(cancel);
+  }
+  wrap.append(label, row);
+  return wrap;
+}
+
+/** Potwierdzenie zmiany typu rozpoznanego dokumentu: pola bieżącego typu przepadną. */
+function retypePanel(index, entry) {
+  const box = node("section", "retype");
+  box.setAttribute("aria-label", "Zmiana typu dokumentu");
+  const edits = countEdits(index);
+  box.append(node("p", "retype-text",
+    `Zmiana typu usunie pola typu „${typeLabel(entry.type)}”${edits ? ` i ${edits} ${plural(edits, "poprawkę", "poprawki", "poprawek")}` : ""}. Otworzy się pusty formularz nowego typu do ręcznego wypełnienia.`));
+  box.append(typePicker(index, entry.type, {
+    confirmText: "Zmień typ",
+    onCancel: () => { state.retypeOpen = null; renderSheet(); el.docOptions.focus(); },
+  }));
+  return box;
+}
+
+function setManualType(index, type) {
+  state.results[index] = retypeEntry(state.results[index], type, specFor(type));
+  delete state.edits[index];
+  delete state.saved[index];
+  Object.assign(state, { retypeOpen: null, sheetMode: "fields", active: null });
+  render();
+  scheduleDraftSave();
+  announce(`Ustawiono typ: ${typeLabel(type)}. Formularz jest pusty, uzupełnij go ręcznie.`);
+  el.sheet.querySelector(".fields-pane input, .fields-pane textarea")?.focus();
+}
+
+/** Źródło pola: otwiera podgląd (gdy schowany), przechodzi do strony i podświetla fragment. */
+function showSource(index, page, text) {
+  if (!state.showPdf || state.pdfFull) {
+    state.showPdf = true;
+    try { localStorage.setItem("o2j-pdf", "1"); } catch { /* bez pamięci */ }
+    renderDocbar();
+    renderSheet();
+  }
+  const viewer = viewers.get(state.files[index]);
+  viewer?.element.showSource?.(page, text == null ? null : String(text));
+  // wąski ekran: podgląd jest pod formularzem, więc przewijamy do niego stronę
+  if (window.matchMedia("(max-width: 1180px)").matches) {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.sheet.querySelector(".pdf-pane")?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  }
+  announce(`Podgląd PDF: strona ${page}.`);
+}
+
+/** Powrót do rozpoznania modelu (wpis sprzed ręcznej zmiany typu). */
+function revertManualType(index) {
+  const previous = state.results[index]?.previous;
+  if (!previous) return;
+  state.results[index] = previous;
+  delete state.edits[index];
+  delete state.saved[index];
+  state.retypeOpen = null;
+  render();
+  scheduleDraftSave();
+  announce("Przywrócono rozpoznanie modelu.");
+}
+
+/** „Formularz / JSON” w nagłówku kolumny formularza. */
+function sheetModeSwitch() {
   const seg = node("div", "seg");
   seg.setAttribute("role", "group");
   seg.setAttribute("aria-label", "Widok danych");
-  for (const [mode, label] of [["fields", "Pola"], ["json", "JSON"]]) {
+  for (const [mode, label] of [["fields", "Formularz"], ["json", "JSON"]]) {
     const b = node("button", null, label);
     b.type = "button";
     b.setAttribute("aria-pressed", String(state.sheetMode === mode));
     b.addEventListener("click", () => { state.sheetMode = mode; state.active = null; hideInsertButton(); renderSheet(); });
     seg.append(b);
   }
-  const download = node("button", "btn");
-  download.type = "button";
-  download.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>';
-  download.append(`Pobierz ${jsonName(file.name)}`);
-  download.addEventListener("click", () => {
-    downloadJson(file.name, dataAt(index));
-    markSaved([index]);
-  });
-  const pdfToggle = node("button", "btn btn-line btn-toggle", "Podgląd PDF");
-  pdfToggle.type = "button";
-  pdfToggle.setAttribute("aria-pressed", String(state.showPdf));
-  pdfToggle.addEventListener("click", () => {
-    state.showPdf = !state.showPdf;
-    try { localStorage.setItem("o2j-pdf", state.showPdf ? "1" : "0"); } catch { /* bez pamięci */ }
-    renderSheet();
-  });
-  tools.append(seg, pdfToggle, download);
-  return tools;
-}
-
-function sheetInfo(index, entry) {
-  const info = node("p", "sheet-info");
-  info.id = "sheet-info";
-  fillSheetInfo(info, index, entry);
-  return info;
-}
-function fillSheetInfo(info, index, entry) {
-  const c = completeness(entry, dataAt(index));
-  const edited = countEdits(index);
-  const parts = [];
-  if (c) parts.push(`Wypełniono ${c.filled} z ${c.total} pól`);
-  if (edited) parts.push(`poprawiono ręcznie: ${edited}`);
-  info.replaceChildren(parts.join(" · "));
-  if (state.sheetMode === "fields") {
-    info.append(node("span", "sheet-hint", state.showPdf
-      ? "Wpisuj wprost w rubryki albo zaznacz tekst w PDF-ie (z klawiatury: Alt+↓ w rubryce)."
-      : "Wpisuj wprost w rubryki."));
-  }
+  return seg;
 }
 
 /** Po wpisaniu wartości: odświeża liczniki bez przebudowy arkusza (fokus zostaje). */
 function refreshAfterEdit(index) {
-  const info = $("sheet-info");
-  if (info) fillSheetInfo(info, index, state.results[index]);
   renderList();
+  renderDocbar();
   renderSummary();
   scheduleDraftSave();
 }
@@ -755,29 +1019,6 @@ function pdfPane(index) {
   return wrap;
 }
 
-function emptyGuide() {
-  const wrap = node("div", "state guide-wrap");
-  const h = node("h2", "state-title", "Zacznij od wgrania dokumentów sprawy");
-  h.id = "sheet-heading";
-  wrap.append(h, node("p", null, "Panel odczyta każdy PDF, rozpozna jego typ po treści i przygotuje plik JSON w formacie Urzędu Zamówień Publicznych."));
-  const guide = node("ol", "guide");
-  [
-    ["Wgraj PDF-y", "Przeciągnij pliki na pole „Dokumenty sprawy” albo wskaż cały folder sprawy."],
-    ["Przetwórz", "Kliknij „Przetwórz”. Każdy plik dostanie swój status."],
-    ["Sprawdź i pobierz", "Popraw dane wprost w rubrykach, porównując z PDF-em obok, i pobierz JSON-y sprawy."],
-  ].forEach(([t, text], i) => {
-    const li = node("li");
-    const no = node("span", "guide-no", String(i + 1));
-    no.setAttribute("aria-hidden", "true");
-    const box = node("div", "guide-text");
-    box.append(node("strong", null, t), node("span", null, text));
-    li.append(no, box);
-    guide.append(li);
-  });
-  wrap.append(guide);
-  return wrap;
-}
-
 function stateBlock(title, paragraphs) {
   const wrap = node("div", "state");
   wrap.append(node("h3", "state-title", title), ...paragraphs.map((p) => node("p", null, p)));
@@ -791,11 +1032,11 @@ function dataAt(index) {
 }
 
 function completeness(entry, data = entry.data) {
-  const spec = DOC_TYPES[entry.type];
+  const spec = specFor(entry.type);
   if (!spec || !data) return null;
   let filled = 0, total = 0;
   for (const group of spec.groups) {
-    const value = data[group.path];
+    const value = group.root ? data : data[group.path];
     const items = group.list ? (Array.isArray(value) && value.length ? value : [{}]) : [value];
     for (const item of items) for (const f of group.fields) {
       total += 1;
@@ -833,7 +1074,11 @@ function evidenceMap(entry) {
   const map = new Map();
   for (const ev of entry.evidence ?? []) {
     if (!ev?.field_path) continue;
-    map.set(ev.field_path, [ev.page_number && `str. ${ev.page_number}`, ev.method].filter(Boolean).join(" · "));
+    map.set(ev.field_path, {
+      label: [ev.page_number && `str. ${ev.page_number}`, ev.method].filter(Boolean).join(" · "),
+      page: ev.page_number ?? null,
+      text: ev.text ?? null,
+    });
   }
   return map;
 }
@@ -903,7 +1148,7 @@ function restoreDraft() {
   draftWritten = true;
   render();
   announce(`Przywrócono poprawki: ${describeDraft(draft)}.`);
-  el.list.querySelectorAll(".file-main")[state.selected]?.focus();
+  el.docsBtn.focus();
 }
 
 function dropDraft() {
@@ -918,7 +1163,7 @@ function markSaved(positions) {
   renderSummary();
 }
 
-const unsaved = () => unsavedPositions({ results: state.results, edits: state.edits, saved: state.saved });
+const unsaved = () => unsavedPositions({ results: state.results, edits: state.edits, saved: state.saved });   // także ręczna zmiana typu
 
 window.addEventListener("beforeunload", (event) => {
   saveDraftNow();
@@ -932,7 +1177,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 /* ---------- rubryki do wpisywania ---------- */
 
 function fieldsView(index, entry) {
-  const spec = DOC_TYPES[entry.type];
+  const spec = specFor(entry.type);
   const data = dataAt(index);
   const wrap = node("div", "fields-view");
   const ctx = { n: 0, evidence: evidenceMap(entry), index };
@@ -942,14 +1187,11 @@ function fieldsView(index, entry) {
   }
   for (const group of spec.groups) {
     const value = data?.[group.path];
-    if (group.list) {
-      // pusta lista: pokazujemy puste rubryki pierwszej pozycji, żeby dało się je uzupełnić
-      const items = Array.isArray(value) && value.length ? value : [{}];
-      items.forEach((item, i) => {
-        const title = items.length > 1 ? `${group.title} ${i + 1}` : group.title;
-        wrap.append(groupBlock(title, group.fields.map((f) =>
-          fieldBlock(f, getPath(item, f.key), ctx, `${group.path}.${i}.${f.key}`))));
-      });
+    if (group.root) {
+      // proste pola z poziomu głównego schematu (typy z kreatora): ścieżka bez prefiksu grupy
+      wrap.append(groupBlock(group.title, group.fields.map((f) => fieldBlock(f, getPath(data, f.key), ctx, f.key))));
+    } else if (group.list) {
+      wrap.append(...listGroup(group, value, ctx));
     } else {
       wrap.append(groupBlock(group.title, group.fields.map((f) =>
         fieldBlock(f, getPath(value, f.key), ctx, `${group.path}.${f.key}`))));
@@ -958,9 +1200,78 @@ function fieldsView(index, entry) {
   return wrap;
 }
 
-function groupBlock(title, children) {
+/**
+ * Grupa z listą pozycji (np. kilku pełnomocników): „Usuń” przy tytule pozycji, gdy jest ich więcej
+ * niż jedna, i cichy „+ Dodaj …” pod ostatnią. Zmiana listy to poprawka jak każda inna
+ * (licznik, „poprawione · cofnij”, kopia robocza, eksport).
+ */
+function listGroup(group, value, ctx) {
+  const index = ctx.index;
+  const listPath = group.path;
+  // pusta lista: pokazujemy puste rubryki pierwszej pozycji, żeby dało się je uzupełnić
+  const items = Array.isArray(value) && value.length ? value : [{}];
+  const original = getPath(state.results[index].data, listPath);
+  const countChanged = (Array.isArray(original) ? original.length : 0) !== (Array.isArray(value) ? value.length : 0);
+  const noun = group.item ?? "pozycję";
+  const blocks = items.map((item, i) => {
+    const title = items.length > 1 ? `${group.title} ${i + 1}` : group.title;
+    const extra = [];
+    if (i === 0 && countChanged) {
+      const undo = node("button", "link-btn", "cofnij");
+      undo.type = "button";
+      undo.setAttribute("aria-label", `Cofnij zmiany listy: ${group.title}`);
+      undo.addEventListener("click", () => {
+        setValue(index, listPath, structuredClone(original ?? []));
+        renderSheet();
+        refreshAfterEdit(index);
+        announce(`Przywrócono listę: ${group.title}.`);
+      });
+      extra.push(node("span", null, "lista poprawiona"), undo);
+    }
+    if (items.length > 1) {
+      const remove = node("button", "link-btn", "Usuń");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Usuń pozycję: ${title}`);
+      remove.addEventListener("click", () => {
+        const next = structuredClone(items);
+        next.splice(i, 1);
+        setValue(index, listPath, next);
+        renderSheet();
+        refreshAfterEdit(index);
+        announce(`Usunięto: ${title}. Zmianę można cofnąć.`);
+        el.sheet.querySelectorAll(".group-add")[0]?.focus();
+      });
+      extra.push(remove);
+    }
+    return groupBlock(title, group.fields.map((f) =>
+      fieldBlock(f, getPath(item, f.key), ctx, `${listPath}.${i}.${f.key}`)), extra);
+  });
+  const add = node("button", "link-btn group-add", `+ Dodaj ${noun}`);
+  add.type = "button";
+  add.addEventListener("click", () => {
+    const current = Array.isArray(value) ? structuredClone(value) : [];
+    current.push(emptyListItem(group.fields, current[0] ?? original?.[0] ?? null));
+    setValue(index, listPath, current);
+    renderSheet();
+    refreshAfterEdit(index);
+    announce(`Dodano pustą pozycję: ${group.title} ${current.length}.`);
+    // fokus na pierwszą rubrykę nowej pozycji
+    const prefix = `f-${index}-${listPath.replace(/[^\w]/g, "_")}_${current.length - 1}_`;
+    el.sheet.querySelector(`input[id^="${prefix}"], textarea[id^="${prefix}"]`)?.focus();
+  });
+  blocks.at(-1).append(add);
+  return blocks;
+}
+
+function groupBlock(title, children, extra = []) {
   const section = node("section", "group");
-  section.append(node("h3", "group-title", title));
+  const head = node("h3", "group-title", title);
+  if (extra.length) {
+    const tags = node("span", "group-tags");
+    tags.append(...extra);
+    head.append(tags);
+  }
+  section.append(head);
   const grid = node("div", "fields");
   grid.append(...children);
   section.append(grid);
@@ -1008,7 +1319,17 @@ function fieldBlock(field, value, ctx, path) {
       tags.append(tag("field-note", "brak w dokumencie"));
     } else {
       const source = ctx.evidence.get(path);
-      if (source) tags.append(tag("field-source", source));
+      if (source?.page) {
+        // klikalne źródło: strona w podglądzie i podświetlony fragment
+        const b = Object.assign(node("button", "link-btn field-source", source.label), { id: `${id}-info`, type: "button" });
+        b.title = "Pokaż w podglądzie PDF";
+        b.setAttribute("aria-label", `Źródło: ${source.label}. Pokaż w podglądzie PDF`);
+        b.addEventListener("click", (event) => {
+          event.preventDefault();
+          showSource(index, source.page, source.text ?? current);
+        });
+        tags.append(b);
+      } else if (source?.label) tags.append(tag("field-source", source.label));
     }
   };
 
@@ -1031,6 +1352,12 @@ function fieldBlock(field, value, ctx, path) {
   targets = box.matches("input, textarea, [role=radiogroup]") ? [box] : [...box.querySelectorAll("input, textarea")];
   targets.forEach((t) => t.setAttribute("aria-describedby", `${id}-info ${id}-error`));
   wrap.append(head, box, error);
+  // wartość od modelu też sprawdzamy sumą kontrolną (bez zapisu: to tylko ostrzeżenie)
+  if (checksumValid(path, value) === false) {
+    error.hidden = false;
+    error.textContent = CHECKSUM_WARNING;
+    error.dataset.kind = "warn";
+  }
   const activate = () => {
     if (state.active?.path === path && state.active.index === index) return;
     state.active = { index, path, field, apply: control.apply, wrap };
@@ -1054,7 +1381,9 @@ function controlFor(field, value, id, commit, path) {
     case "bool": return choiceControl([["1", "tak", 1], ["0", "nie", 0], ["", "brak informacji", null]], value === true ? 1 : value === false ? 0 : value ?? null, id, commit);
     case "enum": return choiceControl([...Object.entries(field.labels ?? {}).map(([v, t]) => [v, t, v]), ["", "brak informacji", null]], value ?? null, id, commit);
     case "names": return namesControl(value, id, commit);
+    case "lines": return linesControl(field, value, id, commit);
     case "amount": return amountControl(value, id, commit);
+    case "number": return amountControl(value, id, commit, { unit: "", integer: field.integer });
     default: return textControl(field, value, id, commit);
   }
 }
@@ -1106,7 +1435,7 @@ function cellsBox(input, cellsCount, gaps = []) {
 }
 
 function cellControl(field, value, id, commit, path) {
-  const lengths = field.kind === "code" ? [2] : expectedDigits(path);
+  const lengths = field.kind === "code" ? [2] : field.lengths ?? expectedDigits(path);
   const input = document.createElement("input");
   input.id = id;
   input.className = "cells-input";
@@ -1127,7 +1456,10 @@ function cellControl(field, value, id, commit, path) {
       const n = Number(digits);
       return n >= 1 && n <= 12 ? commit(n) : commit(null, "Kod powodu to liczba od 1 do 12.");
     }
-    commit(field.integer ? Number(digits) : digits);
+    const value = field.integer ? Number(digits) : digits;
+    // suma kontrolna (NIP, REGON, PESEL, rachunek): ostrzeżenie, wartość i tak zostaje zapisana
+    if (checksumValid(path, digits) === false) return commit(value, CHECKSUM_WARNING, true);
+    commit(value);
   };
   input.addEventListener("input", save);
   input.addEventListener("blur", () => {
@@ -1231,6 +1563,7 @@ function textControl(field, value, id, commit) {
   const input = document.createElement(multi ? "textarea" : "input");
   input.id = id;
   input.className = "box-in";
+  input.placeholder = " ";   // pusta rubryka jest zakreskowana jak puste kratki (:placeholder-shown)
   if (multi) input.rows = 1;
   input.value = value ?? "";
   const grow = () => {
@@ -1265,31 +1598,67 @@ function textControl(field, value, id, commit) {
   };
 }
 
-function amountControl(value, id, commit) {
+function amountControl(value, id, commit, { unit = "zł", integer = false } = {}) {
   const wrap = node("div", "amount-in");
   const input = document.createElement("input");
   input.id = id;
   input.className = "box-in";
-  input.inputMode = "decimal";
-  input.value = value == null ? "" : Number(value).toLocaleString("pl-PL", { minimumFractionDigits: 2 });
+  input.placeholder = " ";
+  input.inputMode = integer ? "numeric" : "decimal";
+  // kwota z groszami („10 000,00”), zwykła liczba bez wymuszonych miejsc po przecinku
+  const show = (n) => n.toLocaleString("pl-PL", unit ? { minimumFractionDigits: 2 } : { maximumFractionDigits: 6 });
+  const example = unit ? "Wpisz kwotę, np. 10 000,00." : integer ? "Wpisz liczbę całkowitą, np. 12." : "Wpisz liczbę, np. 12,5.";
+  input.value = value == null ? "" : show(Number(value));
+  const parse = (text) => {
+    const n = pickAmount(text);
+    return n === null || (integer && !Number.isInteger(n)) ? null : n;
+  };
   const save = () => {
     if (!input.value.trim()) return commit(null);
-    const n = pickAmount(input.value);
-    return n === null ? commit(null, "Wpisz kwotę, np. 10 000,00.") : commit(n);
+    const n = parse(input.value);
+    return n === null ? commit(null, example) : commit(n);
   };
   input.addEventListener("input", save);
   input.addEventListener("blur", () => {
-    const n = pickAmount(input.value);
-    if (n !== null) input.value = n.toLocaleString("pl-PL", { minimumFractionDigits: 2 });
+    const n = parse(input.value);
+    if (n !== null) input.value = show(n);
   });
-  wrap.append(input, node("span", "amount-unit", "zł"));
+  wrap.append(input);
+  if (unit) wrap.append(node("span", "amount-unit", unit));
   return {
     element: wrap,
     apply(text) {
-      const n = pickAmount(text);
-      if (n === null) return commit(null, "W zaznaczeniu nie ma kwoty.");
-      input.value = n.toLocaleString("pl-PL", { minimumFractionDigits: 2 });
+      const n = parse(text);
+      if (n === null) return commit(null, unit ? "W zaznaczeniu nie ma kwoty." : "W zaznaczeniu nie ma liczby.");
+      input.value = show(n);
       commit(n);
+      input.focus();
+    },
+  };
+}
+
+/** Lista prostych wartości ze schematu (tablica tekstów albo liczb): jedna wartość w wierszu. */
+function linesControl(field, value, id, commit) {
+  const input = document.createElement("textarea");
+  input.id = id;
+  input.className = "box-in";
+  input.placeholder = "jedna wartość w wierszu";
+  const list = Array.isArray(value) ? value : value == null ? [] : [value];
+  input.rows = Math.max(1, list.length);
+  input.value = list.join("\n");
+  const save = () => {
+    const rows = input.value.split("\n").map((s) => s.trim()).filter(Boolean);
+    input.rows = Math.max(1, input.value.split("\n").length);
+    const values = field.numeric ? rows.map((r) => pickAmount(r)).filter((n) => n !== null) : rows;
+    commit(values);
+  };
+  input.addEventListener("input", save);
+  return {
+    element: input,
+    apply(text) {
+      const line = pickText(text);
+      input.value = input.value.trim() ? `${input.value.trim()}\n${line}` : line;
+      save();
       input.focus();
     },
   };
@@ -1339,11 +1708,18 @@ function genericGroup(title, data, ctx) {
 const insertBtn = node("button", "insert-btn");
 insertBtn.type = "button";
 insertBtn.hidden = true;
-document.body.append(insertBtn);
+const SVG_NS = "http://www.w3.org/2000/svg";
+const insertArrow = document.createElementNS(SVG_NS, "svg");
+insertArrow.classList.add("insert-arrow");
+insertArrow.setAttribute("aria-hidden", "true");
+insertArrow.innerHTML = '<defs><marker id="insert-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1.5 8 5 1 8.5"/></marker></defs><line marker-end="url(#insert-head)"/><circle r="2.5"/>';
+insertArrow.style.display = "none";
+document.body.append(insertArrow, insertBtn);
 let pendingSelection = "";
 
 function hideInsertButton() {
   insertBtn.hidden = true;
+  insertArrow.style.display = "none";
   pendingSelection = "";
 }
 
@@ -1353,14 +1729,28 @@ document.addEventListener("mouseup", (event) => {
   const selection = window.getSelection();
   const text = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
   if (!inPdf || !text) { hideInsertButton(); return; }
-  const rect = selection.getRangeAt(0).getBoundingClientRect();
+  const sel = selection.getRangeAt(0).getBoundingClientRect();
   const ready = state.active && state.active.index === state.selected && state.sheetMode === "fields";
   pendingSelection = text;
   insertBtn.textContent = ready ? `Wstaw do: ${state.active.field.label}` : "Najpierw kliknij rubrykę po lewej";
   insertBtn.disabled = !ready;
-  insertBtn.style.left = `${Math.min(window.innerWidth - 270, Math.max(8, rect.left))}px`;
-  insertBtn.style.top = `${Math.min(window.innerHeight - 48, rect.bottom + 8)}px`;
   insertBtn.hidden = false;
+  const pane = inPdf.getBoundingClientRect();
+  const place = insertPlacement(sel, pane, { width: insertBtn.offsetWidth, height: insertBtn.offsetHeight },
+    { width: window.innerWidth, height: window.innerHeight });
+  insertBtn.style.left = `${place.button.left}px`;
+  insertBtn.style.top = `${place.button.top}px`;
+  // cienka strzałka w kolorze akcentu: od zaznaczenia do przycisku (tylko gdy jest dokąd wstawić)
+  if (ready && place.arrow) {
+    const line = insertArrow.querySelector("line");
+    const dot = insertArrow.querySelector("circle");
+    line.setAttribute("x1", place.arrow.x1); line.setAttribute("y1", place.arrow.y1);
+    line.setAttribute("x2", place.arrow.x2); line.setAttribute("y2", place.arrow.y2);
+    dot.setAttribute("cx", place.arrow.x1); dot.setAttribute("cy", place.arrow.y1);
+    insertArrow.style.display = "";
+  } else {
+    insertArrow.style.display = "none";
+  }
 });
 insertBtn.addEventListener("mousedown", (event) => event.preventDefault());   // nie gubimy zaznaczenia
 insertBtn.addEventListener("click", () => {
@@ -1393,7 +1783,7 @@ document.addEventListener("keydown", (event) => {
   const stage = el.sheet.querySelector(".pdfv-stage");
   event.preventDefault();
   if (stage) stage.focus();
-  else announce("Podgląd PDF jest wyłączony. Włącz przycisk „Podgląd PDF”.");
+  else announce("Podgląd PDF jest ukryty. Włącz go w menu „Opcje dokumentu”.");
 });
 
 document.addEventListener("pdf-pick", (event) => {
@@ -1413,6 +1803,33 @@ document.addEventListener("pdf-back", focusActiveField);
 
 /* ---------- typy dokumentów ---------- */
 
+let schemasLoading = null;
+/** Schematy typów spoza fields.js z GET /api/document-types (stary backend bez `schema`: zostaje genericGroup). */
+function loadSchemas({ force = false } = {}) {
+  if (state.mode !== "api") return Promise.resolve();
+  if (schemasLoading && !force) return schemasLoading;
+  schemasLoading = fetchDocumentTypes().then((types) => {
+    applyTypeList(types);
+    if (state.results) render();
+  }).catch(() => { /* brak endpointu albo stary backend: formularz z kluczy JSON */ });
+  return schemasLoading;
+}
+function applyTypeList(types) {
+  for (const t of types ?? []) {
+    if (!t?.doc_type) continue;
+    if (t.label) state.typeLabels[t.doc_type] = t.label;
+    if (!DOC_TYPES[t.doc_type] && t.schema && typeof t.schema === "object") {
+      state.schemaSpecs[t.doc_type] = schemaToSpec(t.schema, t.label ?? t.doc_type);
+    }
+  }
+}
+// kreator zapisał nowy typ w backendzie: schematy i lista typów do ponownego pobrania
+document.addEventListener("types-changed", () => {
+  state.types = null;
+  loadSchemas({ force: true });
+  if (state.view === "types") loadTypes();
+});
+
 async function loadTypes() {
   if (state.types) return renderTypes();
   el.typesSource.textContent = "Wczytywanie listy typów…";
@@ -1426,6 +1843,7 @@ async function loadTypes() {
   } else {
     try {
       state.types = { list: await fetchDocumentTypes(), source: "Lista z konfiguracji backendu (configs/documents)." };
+      applyTypeList(state.types.list);
     } catch {
       state.types = { list: local, source: "Backend nie udostępnia jeszcze listy typów (GET /api/document-types), więc pokazuję typy znane panelowi." };
     }
@@ -1442,9 +1860,22 @@ function renderTypes() {
     const count = (t.fields ?? []).length;
     card.append(head, node("p", "type-meta", `${count} ${plural(count, "pole", "pola", "pól")} w schemacie`));
     if (count) {
-      const ul = node("ul", "type-fields");
-      t.fields.forEach((f) => ul.append(node("li", null, typeof f === "string" ? f : f.label ?? f.name ?? String(f))));
-      card.append(ul);
+      // pola zgrupowane po sekcji („Odwołujący: Nazwa” → wiersz „Odwołujący” z listą pól), bez chmury etykiet
+      const groups = new Map();
+      t.fields.forEach((f) => {
+        const text = typeof f === "string" ? f : f.label ?? f.name ?? String(f);
+        const cut = text.indexOf(": ");
+        const [group, name] = cut > 0 ? [text.slice(0, cut), text.slice(cut + 2)] : ["", text];
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group).push(name);
+      });
+      const dl = node("dl", "type-fields");
+      groups.forEach((names, group) => {
+        const row = node("div");
+        row.append(node("dt", null, group || "Pola"), node("dd", null, names.join(", ")));
+        dl.append(row);
+      });
+      card.append(dl);
     }
     return card;
   }));
@@ -1465,8 +1896,6 @@ function jsonView(data) {
   return pre;
 }
 
-const jsonName = (fileName) => `${fileName.replace(/\.pdf$/i, "")}.json`;
-const safeName = (name) => name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "sprawa";
 
 function downloadJson(fileName, data) {
   downloadBlob(jsonName(fileName), new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: "application/json" }));
@@ -1487,7 +1916,7 @@ function downloadBlob(name, blob) {
 /** Nazwa pliku, którą da się złamać po „_” i „-” albo przed rozszerzeniem zamiast w środku słowa. */
 function fileNameNode(tag, className, name) {
   const n = node(tag, className);
-  name.split(/(?<=[_\-])|(?=\.)/).forEach((part, i) => {
+  name.split(/(?<=[_\-])/).forEach((part, i) => {
     if (i) n.append(document.createElement("wbr"));
     n.append(part);
   });
@@ -1507,6 +1936,7 @@ function formatSize(bytes) {
 }
 
 render();
+loadSchemas();   // tryb API: schematy typów spoza fields.js raz przy starcie
 
 /* powiększenie podglądu PDF na cały obszar arkusza (Esc wraca) */
 document.addEventListener("pdf-full", (event) => {

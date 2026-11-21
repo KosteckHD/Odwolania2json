@@ -1,5 +1,17 @@
 # Dodanie klasy dokumentu
 
+## Z panelu WWW (bez edycji plików)
+
+W panelu: menu ☰ → „Typy dokumentów” → „+ Dodaj typ dokumentu”. Kreator przygotowuje YAML i schemat, a przycisk „Dodaj do systemu” wysyła je do `POST /api/document-types`. Serwer:
+
+- sprawdza cały zestaw (dotychczasowe klasy + nowa) funkcją `load_configs`, czyli tymi samymi regułami co przy starcie; przy błędzie niczego nie zapisuje i zwraca opis problemu,
+- odrzuca istniejący identyfikator (`409`), klucz `extractor` (kod Pythona dodaje się tylko w repozytorium) i schemat o innej nazwie niż `<id>.schema.json`,
+- zapisuje `configs/documents/<id>.yaml` i `schemas/<id>.schema.json` i od następnego żądania używa nowej klasy, bez restartu; CLI widzi ją przy kolejnym uruchomieniu.
+
+Zapis z panelu wyłącza zmienna `ALLOW_TYPE_UPLOAD=0` (np. na serwerze współdzielonym). Kreator zawsze pozwala też pobrać oba pliki i dodać je ręcznie, jak poniżej.
+
+## Ręcznie
+
 Przykład [potwierdzenia odbioru](../examples/fourth_class/) pokazuje klasę demonstracyjną. Nie jest ona częścią kontraktu UZP. Zawiera konfigurację klasy i schemat JSON; nie wymaga dopisywania klasy do prompta systemowego ani kodu procesora.
 
 1. Zdefiniuj identyfikator klasy, schemat i znaczenie pól w plikach analogicznych do przykładowych. W `llm_instructions` opisz sposób rozpoznania dokumentu oraz reguły wypełniania pól; schemat określa format wyniku. Wzorce `classification` są używane w trybie bez LLM, więc ich również nie pomijaj.

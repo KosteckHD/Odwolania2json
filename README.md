@@ -24,7 +24,7 @@ Panel do przetwarzania spraw w przeglądarce jest serwowany przez to samo API, p
 .\start.bat
 ```
 
-Skrypt startuje serwer na http://127.0.0.1:8000/ i otwiera tam przeglądarkę. Ctrl+C zatrzymuje serwer. Inny port ustawia zmienna `PORT`, a `NO_BROWSER=1` wyłącza otwieranie przeglądarki. Na Linuksie i macOS służy do tego `./start.sh`. Gdy `.env` zawiera konfigurację modelu, API korzysta z LLM, a panel pokazuje nazwę modelu przy wyniku. Bez niej działa tryb regułowy. Ten sam serwer wystawia `docker compose up --build api`. Opis panelu jest w [frontend/README.md](frontend/README.md).
+Skrypt startuje serwer na http://127.0.0.1:8000/ i otwiera tam przeglądarkę. Ctrl+C zatrzymuje serwer. Inny port ustawia zmienna `PORT`, a `NO_BROWSER=1` wyłącza otwieranie przeglądarki. Na Linuksie i macOS służy do tego `./start.sh`. Gdy `.env` zawiera konfigurację modelu, API korzysta z LLM, a panel pokazuje nazwę modelu przy wyniku. Bez niej działa tryb regułowy. Ten sam serwer wystawia `docker compose up --build api`. Opis panelu jest w [frontend/README.md](frontend/README.md). Nowy typ dokumentu administrator dodaje w panelu (menu ☰ → „Typy dokumentów”): kreator zapisuje YAML i schemat na serwerze, który od razu zaczyna go rozpoznawać, bez restartu ([docs/ADD_DOCUMENT_TYPE.md](docs/ADD_DOCUMENT_TYPE.md)).
 
 ## Tryb LLM
 
