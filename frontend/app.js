@@ -961,6 +961,11 @@ function showSource(index, page, text) {
   }
   const viewer = viewers.get(state.files[index]);
   viewer?.element.showSource?.(page, text == null ? null : String(text));
+  // wąski ekran: podgląd jest pod formularzem, więc przewijamy do niego stronę
+  if (window.matchMedia("(max-width: 1180px)").matches) {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.sheet.querySelector(".pdf-pane")?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  }
   announce(`Podgląd PDF: strona ${page}.`);
 }
 
