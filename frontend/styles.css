@@ -404,8 +404,13 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
 
 /* ---------- instrukcja i typy ---------- */
-.view-help, .view-types { max-width: 860px; padding: 28px 32px 48px; }
-.help-title { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+/* kolumna treści na środku; szerokość i odstępy rosną płynnie z oknem (720 px → 1120 px) */
+.view-help, .view-types {
+  width: min(100%, clamp(720px, 64vw, 1120px));
+  margin-inline: auto;
+  padding: clamp(20px, 2.4vw, 40px) clamp(14px, 2.6vw, 40px) 48px;
+}
+.help-title { font-size: clamp(20px, 1.2vw + 12px, 26px); font-weight: 600; margin-bottom: 8px; }
 .help-lead { font-size: 16px; color: var(--ink-soft); margin-bottom: 20px; max-width: 65ch; }
 .help-steps { counter-reset: s; display: grid; border: 1px solid var(--rule); background: var(--sheet); margin-bottom: 24px; }
 .help-steps li { counter-increment: s; position: relative; padding: 12px 16px 12px 64px; border-top: 1px solid var(--rule-soft); }
@@ -420,9 +425,10 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .admin-note { max-width: 65ch; margin: 0 0 14px; padding: 8px 12px; background: var(--warn-bg); font-size: 14px; }
 .admin-note strong { font-weight: 600; }
 .types-source { font-size: 13px; color: var(--ink-soft); margin: -10px 0 14px; }
-.types-list { display: grid; border: 1px solid var(--rule); background: var(--sheet); margin-bottom: 24px; }
-.type-row { padding: 12px 16px; border-top: 1px solid var(--rule-soft); }
-.type-row:first-child { border-top: 0; }
+.types-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 1px; border: 1px solid var(--rule); background: var(--rule-soft); margin-bottom: 24px; }
+.type-row { padding: 12px 16px; background: var(--sheet); }
+/* nieparzysta liczba typów: ostatni kafel na całą szerokość, bez pustego pola */
+.type-row:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .type-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .type-head h3 { font-size: 16px; font-weight: 600; }
 .type-head code, .help-steps code { font: 13px Consolas, ui-monospace, monospace; color: var(--form); background: var(--paper); padding: 1px 5px; }
