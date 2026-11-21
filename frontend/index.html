@@ -10,6 +10,7 @@
   <link rel="preload" href="./fonts/public-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./styles.css">
   <script type="module" src="./app.js"></script>
+  <script type="module" src="./wizard.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Przejdź do treści</a>
@@ -157,6 +158,7 @@
           <p class="types-source" id="types-source"></p>
           <div class="types-list" id="types-list"></div>
           <h3 class="help-sub">Jak dodać nowy typ dokumentu (administrator, dział IT)</h3>
+          <div class="type-wizard" id="type-wizard"><!-- kreator renderuje wizard.js --></div>
           <ol class="help-steps">
             <li><h3>Schemat danych</h3><p>Dodaj plik <code>schemas/&lt;typ&gt;.schema.json</code> z polami, które mają trafić do JSON-a.</p></li>
             <li><h3>Konfiguracja klasy</h3><p>Dodaj plik <code>configs/documents/&lt;typ&gt;.yaml</code> ze wzorcami rozpoznawania i wskazówkami dla modelu.</p></li>

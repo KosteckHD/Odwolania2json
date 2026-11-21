@@ -426,3 +426,71 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .pdfv-stage[data-zoomed="true"] { overflow: auto; place-items: start center; padding: 12px; }
 .sheet-body[data-full="true"] { grid-template-columns: minmax(0, 1fr); }
 .sheet-body[data-full="true"] .fields-pane, .sheet-body[data-full="true"] .splitter { display: none; }
+
+/* ---------- kreator „Dodaj typ dokumentu” (wizard.js) ---------- */
+.wiz-launch { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.wiz-launch p { font-size: 14px; color: var(--ink-soft); max-width: 52ch; }
+.wiz { border: 1px solid var(--rule); background: var(--sheet); margin-bottom: 24px; }
+.wiz-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--rule); }
+.wiz-head h3 { font-size: 17px; font-weight: 600; margin-right: auto; }
+.wiz-head .link-btn { font-size: 13px; }
+.wiz-step { display: grid; grid-template-columns: 48px minmax(0, 1fr); border-top: 1px solid var(--rule-soft); }
+.wiz-step:first-child { border-top: 0; }
+.wiz-no { display: grid; justify-items: center; align-content: start; padding-top: 14px; font-size: 16px; font-weight: 600; color: var(--form); background: var(--paper); border-right: 1px solid var(--rule-soft); }
+.wiz-body { display: grid; gap: 12px; min-width: 0; padding: 14px 16px 18px; }
+.wiz-body h4 { font-size: 15px; font-weight: 600; }
+.wiz-body h4 + .wiz-intro { margin-top: -8px; }
+.wiz-intro { font-size: 14px; color: var(--ink-soft); max-width: 68ch; }
+.wiz-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.wiz-field { display: grid; gap: 4px; align-content: start; }
+.wiz-check { align-self: end; min-height: var(--ch); }
+.wiz-label { font-size: 13px; font-weight: 500; color: var(--form); }
+.wiz-in { display: block; width: 100%; min-height: var(--ch); padding: 5px 8px; border: 1px solid var(--rule); border-radius: 0; background: var(--sheet); color: var(--ink); font-size: 15px; font-weight: 500; }
+.wiz-in::placeholder { color: var(--form-soft); font-weight: 400; }
+.wiz-in:hover { border-color: var(--form-soft); }
+.wiz-in:focus { outline: 2px solid var(--ink); outline-offset: 0; border-color: var(--ink); }
+.wiz-in[aria-invalid="true"] { border-color: var(--bad); }
+textarea.wiz-in { min-height: 64px; line-height: 1.45; resize: vertical; }
+select.wiz-in { cursor: pointer; padding-right: 4px; }
+.wiz-mono { font: 500 14px Consolas, "Cascadia Mono", ui-monospace, monospace; }
+.wiz-num { max-width: 90px; }
+.wiz-hint { font-size: 13px; color: var(--ink-soft); }
+.wiz-err { font-size: 13px; font-weight: 500; color: var(--bad); }
+.wiz-err:empty { display: none; }
+
+/* pola danych: jeden wiersz = jedno pole */
+.wiz-fields { display: grid; border: 1px solid var(--rule-soft); }
+.wiz-frow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr) 52px 34px; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--rule-soft); }
+.wiz-frow:first-child { border-top: 0; }
+.wiz-fhead { padding-block: 5px; background: var(--paper); font-size: 12.5px; font-weight: 500; color: var(--form); }
+.wiz-frow .choice { justify-content: center; }
+.wiz-list-txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.wiz-del { width: 34px; height: var(--ch); border: 1px solid var(--rule); background: var(--sheet); color: var(--form); font-size: 19px; line-height: 1; cursor: pointer; }
+.wiz-del:hover { border-color: var(--bad); color: var(--bad); }
+.wiz-add { justify-self: start; }
+
+/* pliki */
+.wiz-todo, .wiz-ready, .wiz-warn { padding: 8px 12px; font-size: 14px; }
+.wiz-todo { background: var(--warn-bg); }
+.wiz-todo strong { font-weight: 600; }
+.wiz-todo ul { list-style: disc; padding-left: 20px; margin-top: 4px; }
+.wiz-ready { background: var(--ok-bg); color: var(--ok); font-weight: 500; }
+.wiz-warn { border: 1px solid var(--rule); color: var(--ink-soft); }
+.wiz-file { display: grid; gap: 6px; }
+.wiz-file-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wiz-file-head code, .wiz-where code { font: 13px Consolas, ui-monospace, monospace; color: var(--form); background: var(--paper); padding: 1px 5px; overflow-wrap: anywhere; }
+.wiz-file-head .btn { margin-left: auto; min-height: 32px; padding: 0 10px; font-size: 13px; }
+.wiz-pre { max-height: 300px; overflow: auto; padding: 10px 12px; font-size: 13px; white-space: pre; overflow-wrap: normal; }
+.wiz-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.wiz-where { display: grid; gap: 4px; padding-left: 20px; list-style: decimal; font-size: 14px; color: var(--ink-soft); max-width: 70ch; }
+
+@media (max-width: 720px) {
+  .wiz-step { grid-template-columns: 36px minmax(0, 1fr); }
+  .wiz-body { padding: 12px; }
+  .wiz-pair { grid-template-columns: minmax(0, 1fr); }
+  .wiz-fhead { display: none; }
+  .wiz-frow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px; }
+  .wiz-frow > :nth-child(2) { grid-column: span 2; }
+  .wiz-frow .choice { justify-content: flex-start; }
+  .wiz-list-txt { position: static; width: auto; height: auto; clip: auto; }
+}
