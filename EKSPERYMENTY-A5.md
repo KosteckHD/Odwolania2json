@@ -54,6 +54,7 @@ bez myślenia. Od połowy pracy limity koordynatora: `LLM_CONCURRENCY=1`, `LLM_R
 | 4 | s4-transcribe-reszta | te same 21 | `SCAN_MODE=transcribe` | 0,8878 (nieważny) | ~25 min | 4 dok. bez OCR przez błędy API (przeciążenie, 5 agentów naraz) → `{}`; na 17 udanych bez błędów cyfr |
 | 5 | s5-transcribe-powtorka | 0004, 0009, 0010 ×3 (9) | `SCAN_MODE=transcribe` | nieważny (3× `llm_http`) | ~10 min | **ścieżka awaryjna zadziałała na żywo**: po `llm_http` w ekstrakcji wynik z reguł YAML na przepisanym tekście skanu (odwołanie 0009 rozpoznane regułami, 2 pełnomocnictwa z pustymi listami) |
 | 6 | A5-skany-awaryjny | development 135 | domyślne (transcribe), cherry-pick `aa76b7f`, konk. 1, odstęp 4 s | **0,9811** (TP 1353, FP 12, FN 40) | 1704 s | 0 błędów, 0 wyników awaryjnych; odwołanie 0,973, pełnomocnictwo 0,995, przelew 0,992 |
+| 7 | Ed5-skany-30-transcribe | wszystkie 30 skanów | domyślne (transcribe), konk. 1, odstęp 5 s | **0,9643** (TP 297, FP 16, FN 6) | 2053 s | 0 błędów; odwołanie 0,958, pełnomocnictwo 0,967, przelew 0,981; odwołanie 100–200 s, 1 strona 15–80 s |
 
 Pierwsze podejście do próby 6 (konk. 2, odstęp 3 s) przerwałem po kilku minutach na prośbę koordynatora
 (zmiana limitów i cherry-pick), bez wyniku.
@@ -89,9 +90,49 @@ normalizacji po modelu, nie z odczytu):
   naraz co 6 s (przy równoległości 3 strony odwołania idą naraz, więc realnie ~30–40 s).
 - Tokeny: image ~9,5 tys. wejścia na odwołanie, transcribe ~14 tys. (+ ~3 tys. wyjścia OCR).
 
-**Decyzja: domyślnie `transcribe`.** Identyfikatory (NIP, KRS, REGON, PESEL, rachunki) to najwięcej pól i
-klucze dopasowania list w ocenie UZP; gubienie w nich cyfr kosztuje więcej niż czas. `image` zostaje jako
-opcja (`SCAN_MODE=image`) na wypadek limitu czasu.
+**Decyzja (po próbach 1–4): domyślnie `transcribe`.** Identyfikatory (NIP, KRS, REGON, PESEL, rachunki)
+to najwięcej pól i klucze dopasowania list w ocenie UZP; gubienie w nich cyfr kosztuje więcej niż czas.
+`image` zostaje jako opcja (`SCAN_MODE=image`) na wypadek limitu czasu.
+
+### Pełny przebieg na 30 skanach (próba 7) i rewizja decyzji
+
+- transcribe, 30 skanów: **F1 0,9643** (TP 297, FP 16, FN 6). Dla porównania image (próby 2+3, te same 30
+  skanów): TP 293, FP 12, FN 5 → **F1 0,9718**. Różnica to ~5 pól na 30 dokumentów, czyli w granicach szumu
+  modelu: 6 z 16 FP transcribe to jedno odwołanie (0007), w którym model w ekstrakcji zdublował
+  odwołującego (drugi wpis z tymi samymi danymi); w próbie 4 to samo odwołanie wyszło bez tego błędu, więc
+  to niedeterminizm ekstrakcji, nie OCR. Bez tego przypadku transcribe ≈ 0,974.
+- transcribe znów bez ani jednego błędu cyfr w identyfikatorach; image miał ich 6 na 30 dokumentów.
+  Pozostałe błędy wspólne: `pelnomocnik.nazwa` puste (6/10 odwołań, prompt), `prowadzacy_postepowanie`
+  = 1 zamiast null (3×, prompt), kolejność/odmiana nazwisk, „skarbowea”, „Dębicy”, zgubiony numer
+  CEN na końcu tytułu (długie stringi i tak w progu 80%).
+- Obejrzane strony (odwołanie 0001 str. 1 i 5, pełnomocnictwo 0002, potwierdzenie 0003) zgadzają się z
+  wynikiem: te dokumenty mają F1 1,0 poza `pelnomocnik.nazwa` w odwołaniu 0001 (kancelaria jest w nagłówku
+  pisma i w „adres do korespondencji”, model jej nie wpisał).
+- **Decyzja końcowa: zostaje `transcribe` jako domyślny**, ale to wybór „dokładność identyfikatorów i
+  zgodność z dalszą ścieżką tekstową” (poprawki A1/A3 na tekście działają też na skanach), a nie wyraźna
+  przewaga F1. `image` jest 5–8× szybszy i tańszy (1 zapytanie, ~9,5 tys. tokenów na odwołanie zamiast
+  ~5 zapytań i ~17 tys.). Jeśli jury ma limit czasu, przełączyć `SCAN_MODE=image`.
+- Bazowo (bez Tesseracta) te 30 skanów dawało 0 pól; teraz ~96–97% F1.
+
+## Uwagi dla integracji
+
+- Pliki: `src/kio_extract/vision.py` (nowy), `processing.py` (przebudowany `process_with_evidence`:
+  `_read_scans`, `_rules`, `_finish`, wynik awaryjny), `providers/chat.py` (`_complete`,
+  `transcribe_image`, `images=` w `extract_json`), `prompt_extraction.py` (tylko przekazanie `images`),
+  `cli.py` (`--on-error`, pola `fallback`/`written` w raporcie), testy `tests/test_scans.py`.
+  Konflikty możliwe z A2 (podział zadania w `processing.py` / `prompt_extraction.py`) i A3 (warstwa po
+  modelu w `_finish`): wynik awaryjny opakowuje całą ścieżkę modelu, więc nowa logika A2/A3 powinna trafić
+  do środka bloku `try` w `process_with_evidence` albo do `_finish`.
+- Zużycie tokenów w raporcie obejmuje teraz OCR stron (sumowane z wątków odczytu).
+- Klient Anthropic nie ma `transcribe_image`: przy `LLM_PROVIDER=anthropic` skany idą do Tesseracta, jeśli
+  jest, inaczej `{}`.
+- `.env.example` wskazuje IONOS; obsługi obrazów dla Qwen3.5 9B w IONOS nie sprawdzałem. Jeśli IONOS
+  odrzuci obraz (HTTP 400), skan dostanie `{}` z kodem `llm_http` w raporcie.
+- Obraz musi być RGB (skala szarości → HTTP 400 w HostYourAI), co `render_page_jpeg` zapewnia.
+- `evaluation/scan_experiment.py`: przebieg i F1 na skanach UZP (wzorce leżą obok PDF-ów).
+- Przebieg zbioru roboczego dopisałem ręcznie do wspólnej tabeli `results.tsv` (agent `Ed5`):
+  `experiment.py` w tej wersji ignoruje `--results` i `--agent` i pisze do `.local/experiments/results.tsv`
+  w kopii roboczej.
 
 ### Odporność po próbach 4–5
 
