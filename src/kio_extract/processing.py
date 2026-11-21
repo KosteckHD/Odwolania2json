@@ -9,6 +9,7 @@ from .evidence import locate_evidence, mark_ocr
 from .extraction_engine import resolve_extractor
 from .pdf_reader import extract_pdf
 from .prompt_extraction import PromptExtractor
+from .postprocess import postprocess
 from .ocr import tesseract_ocr
 from .normalization import normalize_bzp, normalize_polish_bank_account, normalize_ted
 
@@ -57,6 +58,8 @@ class DocumentProcessor:
             raise DocumentError("ocr_required", f"Strony wymagające OCR: {pages}")
         if self.prompted:
             classification, data = self.prompted.extract(document)
+            if classification.doc_type in self.configs:
+                data = postprocess(data, document, self.configs[classification.doc_type])
             evidence = ()
         else:
             classification = classify(document, tuple(self.configs.values()))

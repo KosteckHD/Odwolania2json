@@ -23,3 +23,30 @@ options:
     '10': Zaniechanie unieważnienia postępowania
     '11': Opis przedmiotu zamówienia (OPZ)
     '12': Projektowane postanowienia umowy
+postprocess:
+  # Deterministyczne poprawki odpowiedzi modelu (src/kio_extract/postprocess.py).
+  fill_missing:
+    # Dzień czynności: jedyna data w zdaniu „Zamawiający w dniu <data> ...”.
+    - field: OdwolanieKIO.czynnosc_dzien
+      pattern: '(?i)zamawiający\s+w\s+dniu\s+(?P<value>[0-9]{1,2}\s+[a-ząćęłńóśźż]+\s+[0-9]{4}|[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})'
+      normalize: iso_date
+    # Kancelaria pełnomocnika: nazwa po „adres do korespondencji:” do przecinka przed adresem,
+    # tylko gdy wygląda na kancelarię/spółkę prawników i model wskazał osobę pełnomocnika.
+    - field: Odwolujacy[].pelnomocnik.nazwa
+      pattern: '(?i)adres\s+do\s+korespondencji\s*:\s*(?P<value>(?=[^,@]{0,200}?(?:kancelari|adwokac|radc|prawn|partner|sp\.\s*[kp]\b))[^,@]{3,200}?)\s*,\s*(?:ul\.|al\.|pl\.|os\.|[0-9]{2}-[0-9]{3})'
+      requires: ['Odwolujacy[].pelnomocnik.imie_nazwisko']
+    # E-mail pełnomocnika: pierwszy adres e-mail po adresie do korespondencji (bez innego „@” po drodze).
+    - field: Odwolujacy[].pelnomocnik.mail
+      pattern: '(?i)adres\s+do\s+korespondencji\s*:[^@]{0,300}?(?<![\w.%+-])(?P<value>[\w.%+-]+@[\w-]+(?:\.[\w-]+)+)'
+      requires: ['Odwolujacy[].pelnomocnik.imie_nazwisko']
+  derive:
+    # Opis powodu zawsze ze słownika options.czynnosc_powod_opisy (1:1 z czynnosc_powod_id).
+    - field: OdwolanieKIO.czynnosc_opis
+      source: OdwolanieKIO.czynnosc_powod_id
+      option: czynnosc_powod_opisy
+  # Imię i nazwisko w pisowni z dokumentu (diakrytyki, końcówka rodzaju), gdy model ją zmienił.
+  snap_to_text:
+    - 'Odwolujacy[].pelnomocnik.imie_nazwisko'
+  # Prowadzący postępowanie ma sens tylko przy kilku zamawiających; przy jednym null.
+  null_when_single:
+    - 'Zamawiajacy[].prowadzacy_postepowanie'

@@ -8,6 +8,7 @@ from jsonschema.exceptions import SchemaError
 
 from .contracts import ConfigurationError, DocumentConfig, FieldRule
 from .normalization import NORMALIZERS
+from .postprocess import validate_postprocess
 
 
 def _patterns(raw: object) -> tuple[str, ...]:
@@ -65,7 +66,8 @@ def load_configs(config_dir: Path, schema_dir: Path) -> dict[str, DocumentConfig
             if extractor is not None and not re.fullmatch(r"[\w.]+:[A-Za-z_]\w*", extractor):
                 raise ConfigurationError("Ekstraktor musi mieć postać modul:funkcja")
             configs[doc_type] = DocumentConfig(
-                doc_type, schema, positive, negative, minimum, _field_rules(fields, schema), options, extractor
+                doc_type, schema, positive, negative, minimum, _field_rules(fields, schema), options, extractor,
+                validate_postprocess(settings.get("postprocess"), schema, options),
             )
         except (OSError, ValueError, KeyError, TypeError, AttributeError, re.error, yaml.YAMLError, SchemaError, ConfigurationError) as exc:
             raise ConfigurationError(f"Błąd konfiguracji {path.name}: {exc}") from exc

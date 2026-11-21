@@ -59,6 +59,7 @@ class DocumentConfig:
     fields: Mapping[str, FieldRule] = field(default_factory=dict)
     options: Mapping[str, JsonValue] = field(default_factory=dict)
     extractor: str | None = None
+    postprocess: Mapping[str, JsonValue] = field(default_factory=dict)
 
 
 class LLMClient(Protocol):
