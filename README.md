@@ -2,6 +2,14 @@
 
 Odwołania2JSON przetwarza sprawy KIO partiami. W trybie konkursowym jeden [system prompt](prompts/system_pl.md) prowadzi model przez klasyfikację i ekstrakcję w jednym wywołaniu na PDF. CLI odczytuje tekst, dołącza aktualne schematy i słownik powodów odwołania, waliduje odpowiedź, a do `output/` zapisuje pola UZP. Tryb regułowy służy jako lokalna baza porównawcza.
 
+## Szybki start dla oceniających
+
+1. Python 3.13+: `py -3.13 -m venv .venv`, potem `.venv\Scripts\python.exe -m pip install -r requirements.txt` (Linux: `python3.13 -m venv .venv` i `.venv/bin/python -m pip install -r requirements.txt`).
+2. Skopiuj `.env.example` jako `.env` i wklej klucz API z formularza zgłoszenia po `API_KEY=`. Model i adres są już wpisane: Qwen3.5 9B (Apache 2.0) w IONOS AI Model Hub, serwery w UE.
+3. Umieść PDF-y w `input\<sprawa>\` i uruchom `przetworz.bat` (Linux: `./przetworz.sh`). Wyniki pojawią się w `output\<sprawa>\<nazwa pliku>.json`; dokument spoza trzech klas dostaje plik z samym `{}`.
+
+Ten sam program uruchamia `python main.py`; `--rules` wymusza tryb bez modelu, a `--input` / `--output` wskazują inne katalogi. Panel WWW do przeglądania i poprawiania wyników startuje przez `start.bat` (sekcja „Panel WWW”).
+
 ## Uruchomienie
 
 Wymagany jest Python 3.13 lub nowszy. Utwórz środowisko i zainstaluj zależności.
@@ -14,7 +22,7 @@ py -3.13 -m venv .venv
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-Na Linuksie używaj `python3.13 -m venv .venv` i `.venv/bin/python`. Umieść np. `pismo.pdf` pod `input/case1/`. Wynik pojawi się w `output/case1/pismo.json`. Argumenty `--input` i `--output` wybierają inne katalogi. `--negative-output empty_object` zmienia domyślny wynik o długości 0 bajtów na `{}`. CLI zgłasza strony wymagające OCR i przechodzi do następnego pliku. Uruchomienie na świeżym `output/` ułatwia oddzielenie bieżących wyników od poprzednich przebiegów.
+Na Linuksie używaj `python3.13 -m venv .venv` i `.venv/bin/python`. Umieść np. `pismo.pdf` pod `input/case1/`. Wynik pojawi się w `output/case1/pismo.json`. Argumenty `--input` i `--output` wybierają inne katalogi. Dokument spoza obsługiwanych klas dostaje plik o tej samej nazwie z samym `{}` (wymóg UZP); `--negative-output empty_file` zapisuje zamiast tego pusty plik. CLI zgłasza strony wymagające OCR i przechodzi do następnego pliku. Uruchomienie na świeżym `output/` ułatwia oddzielenie bieżących wyników od poprzednich przebiegów.
 
 ## Panel WWW
 
@@ -64,7 +72,7 @@ Wynik pomiaru LLM można opatrzyć argumentami `--model`, `--revision` i `--prom
 
 Przy ponawianiu przetwarzania użyj opcji CLI `--report artifacts/run.json`, a następnie przekaż evaluatorowi `--run-report artifacts/run.json`. Raport przechowuje status i skrót zapisanego pliku. Evaluator traktuje błąd dokumentu, brak wpisu oraz zmieniony wynik jako błąd, również gdy w `output/` znajduje się plik z wcześniejszego przebiegu. Raport powstaje po zakończeniu batcha, dlatego dla każdego nowego uruchomienia używaj odrębnej ścieżki raportu.
 
-Kontenery można uruchomić przez `docker compose run --build --rm batch` lub `docker compose up --build api`. Obraz instaluje Tesseract i pakiet języka polskiego. Przetwarzanie batcha przez LLM wymaga argumentu `--llm`, np. `docker compose run --build --rm batch python main.py --llm`.
+Kontenery można uruchomić przez `docker compose run --build --rm batch` lub `docker compose up --build api`. Obraz instaluje Tesseract i pakiet języka polskiego. Batch korzysta z LLM, gdy środowisko go konfiguruje (np. plik `.env`); `--rules` wymusza tryb regułowy.
 
 ## Tryb regułowy
 

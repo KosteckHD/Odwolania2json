@@ -7,8 +7,25 @@ from ..contracts import ConfigurationError, DocumentError, JsonObject
 from .rate_limit import RateLimitSettings, coordinator
 
 
+RESERVED_BODY_KEYS = {"model", "messages", "response_format"}
+
+
+def extra_body_from_environment() -> dict:
+    """Dodatkowe pola zapytania z LLM_EXTRA_BODY (JSON), np. {"reasoning_effort": "none"} dla IONOS."""
+    raw = os.getenv("LLM_EXTRA_BODY", "").strip()
+    if not raw:
+        return {}
+    try:
+        extra = json.loads(raw)
+    except ValueError as exc:
+        raise ConfigurationError("LLM_EXTRA_BODY musi być obiektem JSON") from exc
+    if not isinstance(extra, dict) or RESERVED_BODY_KEYS & extra.keys():
+        raise ConfigurationError("LLM_EXTRA_BODY musi być obiektem JSON bez pól model, messages i response_format")
+    return extra
+
+
 class ChatClient:
-    def __init__(self, base_url: str, model: str, api_key: str):
+    def __init__(self, base_url: str, model: str, api_key: str, extra_body: dict | None = None):
         try:
             url = urlsplit(base_url)
             hostname, port = url.hostname, url.port
@@ -27,6 +44,7 @@ class ChatClient:
         self.connection = HTTPSConnection if url.scheme == "https" else HTTPConnection
         self.path = url.path.rstrip("/") + "/chat/completions"
         self.model = model
+        self.extra_body = dict(extra_body or {})
         self.rate_limit = RateLimitSettings.from_environment()
         self.last_usage = None
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -39,6 +57,7 @@ class ChatClient:
             os.getenv("LLM_BASE_URL", "").strip(),
             os.getenv("LLM_MODEL", "").strip(),
             (os.getenv("LLM_API_KEY") or os.getenv("API_KEY", "")).strip(),
+            extra_body_from_environment(),
         )
 
     def extract_json(self, *, instructions: str, text: str, schema: JsonObject) -> JsonObject:
@@ -50,6 +69,7 @@ class ChatClient:
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0,
+                **self.extra_body,
             },
             ensure_ascii=False,
         ).encode("utf-8")

@@ -14,7 +14,7 @@ Audyt z 21.11.2026 przypięty do commita UZP `de135d20811caf630f3e94dc655ba5eebd
 
 | ID | Pytanie | Decyzja do czasu odpowiedzi | Właściciel |
 | --- | --- | --- | --- |
-| U01 | Czy pusty wynik ma 0 bajtów, czy zawiera `{}`? | Domyślnie 0 bajtów (`empty_file`). `--negative-output empty_object` zapisuje `{}`. | Backend |
+| U01 | Czy pusty wynik ma 0 bajtów, czy zawiera `{}`? | Rozstrzygnięte przez UZP 21.11: plik o nazwie oryginału z samym `{}`. To domyślne zachowanie CLI (`empty_object`); `--negative-output empty_file` zostaje jako opcja. | Backend |
 | U02 | Jak scorer liczy F1 dla `null`, pustych napisów, braków, list i duplikatów? | Lokalny micro-F1 według [planu integracji](INTEGRATION_PLAN.md). Uznaj go za metrykę zespołu. | Backend |
 | U03 | Który opis obowiązuje dla ID 6 oraz czy w ID 12 interpunkcja jest oceniana? | Prompt dostaje dokładne etykiety z opublikowanego słownika, bez końcowej kropki dla ID 12. Pięć złotych opisów dla ID 6 odbiega od słownika. | Backend |
 | U04 | Jak reprezentować brak pierwszego zarzutu, brak typu mocodawcy i nieustalone umocowanie? Czy `pelnomocnik` pozostaje obiektem z pustymi polami? | Roboczo `null` dla nieustalonego skalara, `[]` dla pustej listy, obiekt z pełnym zestawem kluczy. Jawne 0/1 na podstawie treści. Potwierdzić przed wydaniem. | Backend |

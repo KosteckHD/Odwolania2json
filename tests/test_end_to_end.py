@@ -46,13 +46,14 @@ def test_batch_writes_schema_output_and_preserves_names(tmp_path):
         "numer_transakcji": None, "tytul": None, "z_rachunku": None,
     }}
     negative = output_dir / "case1" / "odwolanie.json"
-    assert negative.read_bytes() == b""
+    # UZP: dokument spoza klas daje plik o tej samej nazwie z samym {}
+    assert json.loads(negative.read_bytes()) == {}
     assert len(list(output_dir.rglob("*.json"))) == 2
     first_run = result_path.read_bytes()
 
-    assert main([*args, "--negative-output", "empty_object"]) == 0
+    assert main([*args, "--negative-output", "empty_file"]) == 0
     assert result_path.read_bytes() == first_run
-    assert json.loads(negative.read_bytes()) == {}
+    assert negative.read_bytes() == b""
 
 
 def test_unreadable_files_continue_batch_and_ocr_is_injectable(tmp_path, capsys):
@@ -117,10 +118,13 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
     monkeypatch.setenv("LLM_BASE_URL", "http://localhost:8765/v1")
     monkeypatch.setenv("LLM_MODEL", "test-model")
     monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_EXTRA_BODY", '{"reasoning_effort": "none"}')
 
-    assert main(["--llm", "--input", str(input_dir), "--output", str(output_dir)]) == 1
+    # bez --llm: model włącza się sam, bo środowisko go konfiguruje
+    assert main(["--input", str(input_dir), "--output", str(output_dir)]) == 1
     assert len(requests) == 3
     assert requests[0]["response_format"] == {"type": "json_object"}
+    assert requests[0]["reasoning_effort"] == "none"
     system, user = requests[0]["messages"]
     assert system["role"] == "system"
     assert "czynnosc_powod_opisy" in system["content"]
@@ -129,9 +133,10 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
     assert user["role"] == "user"
     assert "potwierdza wplate" in json.loads(user["content"])["strony"][0]["tekst"]
     assert "a_odwolanie.pdf" not in user["content"]
-    expected_payment = {"przelew_bankowy": {**payment["przelew_bankowy"], "na_rachunek": "00123456789012345678901234"}}
+    # numer zostaje jak w odpowiedzi modelu (z „PL”), bez spacji
+    expected_payment = payment
     assert json.loads((output_dir / "case1" / "a_odwolanie.json").read_bytes()) == expected_payment
-    assert (output_dir / "case1" / "b_przelew.json").read_bytes() == b""
+    assert json.loads((output_dir / "case1" / "b_przelew.json").read_bytes()) == {}
     assert not (output_dir / "case1" / "c_wadliwy.json").exists()
     assert "invalid_output" in capsys.readouterr().err
 
@@ -187,3 +192,25 @@ def test_run_report_marks_failures_and_tracks_saved_bytes(tmp_path):
     assert first["sha256"] == hashlib.sha256((output_dir / first["output"]).read_bytes()).hexdigest()
     assert second["status"] == "error" and second["code"] == "pdf_read"
     assert old_result.read_text(encoding="utf-8") == '{"old": true}'
+
+
+def test_rules_flag_skips_configured_llm(tmp_path, monkeypatch):
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    create_pdf(input_dir / "case" / "a.pdf", ("Potwierdzenie wykonania przelewu", "Kwota: 50,00 PLN"))
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:8765/v1")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setattr(chat, "HTTPConnection", None)   # każde wywołanie modelu zakończyłoby test błędem
+    assert main(["--rules", "--input", str(input_dir), "--output", str(output_dir)]) == 0
+    assert json.loads((output_dir / "case" / "a.json").read_bytes())["przelew_bankowy"]["kwota"] == 50
+
+
+def test_extra_body_rejects_reserved_and_invalid_values(monkeypatch):
+    from kio_extract.contracts import ConfigurationError
+    for raw in ('{"model": "x"}', "[1]", "nie json"):
+        monkeypatch.setenv("LLM_EXTRA_BODY", raw)
+        try:
+            chat.extra_body_from_environment()
+        except ConfigurationError:
+            continue
+        raise AssertionError(raw)

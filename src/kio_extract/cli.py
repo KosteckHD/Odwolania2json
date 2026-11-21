@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import os
 import sys
 import time
 from collections import Counter
@@ -16,6 +17,12 @@ from .schema_registry import load_configs
 
 
 ROOT = Path(__file__).resolve().parents[2]
+LLM_SETTINGS = ("LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY", "API_KEY")
+
+
+def llm_configured() -> bool:
+    """Ta sama reguła co w API: model działa, gdy ustawiono którąkolwiek zmienną LLM."""
+    return any(os.getenv(name, "").strip() for name in LLM_SETTINGS)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,9 +31,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=ROOT / "output")
     parser.add_argument("--configs", type=Path, default=ROOT / "configs" / "documents")
     parser.add_argument("--schemas", type=Path, default=ROOT / "schemas")
-    parser.add_argument("--llm", action="store_true", help="Wyślij tekst PDF do skonfigurowanego API LLM")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--llm", action="store_true",
+                      help="Wymuś model językowy (domyślnie włączony, gdy .env lub środowisko go konfiguruje)")
+    mode.add_argument("--rules", action="store_true", help="Tryb regułowy, bez modelu językowego")
     parser.add_argument("--prompt", type=Path, default=ROOT / "prompts" / "system_pl.md", help="Plik prompta trybu LLM")
-    parser.add_argument("--negative-output", choices=("empty_file", "empty_object"), default="empty_file")
+    parser.add_argument("--negative-output", choices=("empty_object", "empty_file"), default="empty_object",
+                        help="Wynik dla dokumentu spoza klas: plik z {} (domyślnie, wymóg UZP) albo pusty plik")
     parser.add_argument("--report", type=Path, help="Zapisz raport bieżącego przebiegu poza katalogami input/output")
     args = parser.parse_args(argv)
 
@@ -37,7 +48,9 @@ def main(argv: list[str] | None = None) -> int:
         if report_path and (report_path.is_relative_to(input_dir) or report_path.is_relative_to(output_dir)):
             raise ConfigurationError("Raport musi znajdować się poza katalogami input i output")
         configs = load_configs(args.configs, args.schemas)
-        client = client_from_environment() if args.llm else None
+        use_llm = args.llm or (not args.rules and llm_configured())
+        client = client_from_environment() if use_llm else None
+        print(f"Tryb: {'model językowy ' + getattr(client, 'model', '') if client else 'regułowy (bez modelu)'}", file=sys.stderr)
         processor = DocumentProcessor(configs, args.prompt, client=client)
         jobs = output_paths(input_dir, output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
