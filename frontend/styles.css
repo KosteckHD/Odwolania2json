@@ -380,9 +380,11 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 @keyframes shimmer { to { background-position: -150% 0; } }
 
 /* wstaw zaznaczenie z PDF-u */
-.insert-btn { position: fixed; z-index: 60; max-width: 280px; padding: 7px 12px; border: 1px solid var(--brand); background: var(--brand); color: #fff; font: 500 14px var(--font); text-align: left; cursor: pointer; }
-.insert-btn:hover:not(:disabled) { background: var(--brand-hover); }
-.insert-btn:disabled { background: var(--sheet); border-color: var(--rule-field); color: var(--ink); cursor: default; }
+/* „Wstaw do: …”: obrysowana etykieta na kartce (mockup), wypełnienie dopiero po najechaniu */
+.insert-btn { position: fixed; z-index: 60; max-width: 300px; padding: 6px 14px; border: 1px solid var(--brand); background: var(--sheet); color: var(--brand); font: 500 14.5px var(--font); text-align: left; cursor: pointer; }
+.insert-btn:hover:not(:disabled) { background: var(--brand); color: #fff; }
+.insert-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.insert-btn:disabled { border-style: dashed; border-color: var(--rule-field); color: var(--ink-soft); cursor: default; }
 
 /* ---------- podgląd PDF: strona po stronie ---------- */
 .pdfv { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -676,9 +678,15 @@ main:focus { outline: none; }   /* fokus programowy po zmianie widoku: bez ramki
 
 /* „Wstaw do: …” i cienka strzałka od zaznaczenia w PDF-ie do przycisku */
 .insert-arrow { position: fixed; inset: 0; z-index: 59; width: 100vw; height: 100vh; pointer-events: none; overflow: visible; }
-.insert-arrow line { stroke: var(--brand); stroke-width: 1.25; }
-.insert-arrow marker path { fill: none; stroke: var(--brand); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-.insert-arrow circle { fill: var(--brand); }
+.insert-arrow line { stroke: var(--brand); stroke-width: 1.5; stroke-linecap: round; }
+.insert-arrow marker path { fill: var(--brand); stroke: none; }
+/* delikatne pojawienie się; bez animacji przy prefers-reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  .insert-btn:not([hidden]), .insert-arrow { animation: insert-in .12s ease-out; }
+}
+@keyframes insert-in { from { opacity: 0; } to { opacity: 1; } }
+/* telefon: kolumny jedna pod drugą, sama etykieta wystarczy */
+@media (max-width: 640px) { .insert-arrow { display: none !important; } }
 
 /* tryb atrapy: dyskretny znacznik */
 .mode-flag { padding: 1px 7px; background: none; border: 1px dashed var(--warn); font-size: 12.5px; }

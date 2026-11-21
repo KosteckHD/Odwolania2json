@@ -3,7 +3,7 @@ import { DOC_TYPES, emptyListItem, getPath, schemaToSpec } from "./fields.js";
 import { zipStore } from "./zip.js";
 import { buildResultFiles, jsonName, retypeEntry, safeName } from "./export.js";
 import { createPdfViewer } from "./pdfview.js";
-import { STATUS, docsSummary, insertPlacement, positionText, progressText } from "./layout.js";
+import { STATUS, docsSummary, avoidText, insertPlacement, positionText, progressText } from "./layout.js";
 import { CHECKSUM_WARNING, checksumValid, expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
 import {
   DRAFT_STORAGE_KEY, alignDraft, buildDraft, caseKey, countChanges, describeDraft, findDraft,
@@ -1733,7 +1733,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const insertArrow = document.createElementNS(SVG_NS, "svg");
 insertArrow.classList.add("insert-arrow");
 insertArrow.setAttribute("aria-hidden", "true");
-insertArrow.innerHTML = '<defs><marker id="insert-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1.5 8 5 1 8.5"/></marker></defs><line marker-end="url(#insert-head)"/><circle r="2.5"/>';
+// grot (pełny trójkąt) przy zaznaczeniu, linia od etykiety, jak na mockupie
+insertArrow.innerHTML = '<defs><marker id="insert-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 1 10 5 0 9z"/></marker></defs><line marker-end="url(#insert-head)"/>';
 insertArrow.style.display = "none";
 document.body.append(insertArrow, insertBtn);
 let pendingSelection = "";
@@ -1757,17 +1758,21 @@ document.addEventListener("mouseup", (event) => {
   insertBtn.disabled = !ready;
   insertBtn.hidden = false;
   const pane = inPdf.getBoundingClientRect();
-  const place = insertPlacement(sel, pane, { width: insertBtn.offsetWidth, height: insertBtn.offsetHeight },
-    { width: window.innerWidth, height: window.innerHeight });
+  const size = { width: insertBtn.offsetWidth, height: insertBtn.offsetHeight };
+  // wiersze tekstu w widocznej części podglądu: etykieta nie może ich zasłaniać
+  const boxes = [...inPdf.querySelectorAll(".textLayer span")]
+    .map((span) => span.getBoundingClientRect())
+    .filter((r) => r.width && r.bottom > pane.top && r.top < pane.bottom);
+  const place = avoidText(insertPlacement(sel, pane, size, { width: window.innerWidth, height: window.innerHeight }),
+    boxes, size, { left: pane.left + 8, right: Math.min(window.innerWidth, pane.right) - 8, top: pane.top + 4 });
   insertBtn.style.left = `${place.button.left}px`;
   insertBtn.style.top = `${place.button.top}px`;
-  // cienka strzałka w kolorze akcentu: od zaznaczenia do przycisku (tylko gdy jest dokąd wstawić)
+  // cienka strzałka w kolorze akcentu: od etykiety do zaznaczenia (tylko gdy jest dokąd wstawić)
   if (ready && place.arrow) {
     const line = insertArrow.querySelector("line");
-    const dot = insertArrow.querySelector("circle");
     line.setAttribute("x1", place.arrow.x1); line.setAttribute("y1", place.arrow.y1);
     line.setAttribute("x2", place.arrow.x2); line.setAttribute("y2", place.arrow.y2);
-    dot.setAttribute("cx", place.arrow.x1); dot.setAttribute("cy", place.arrow.y1);
+    insertBtn.dataset.side = place.side;
     insertArrow.style.display = "";
   } else {
     insertArrow.style.display = "none";
