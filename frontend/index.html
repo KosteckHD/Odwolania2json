@@ -108,9 +108,17 @@
       <main id="main" tabindex="-1">
         <!-- Widok: sprawa -->
         <div class="view-case" id="view-case">
-          <section class="docs" aria-labelledby="docs-heading">
-            <h2 class="sec" id="docs-heading">Dokumenty sprawy</h2>
+          <section class="docs" id="docs" aria-labelledby="docs-heading">
+            <div class="docs-head">
+              <h2 class="sec" id="docs-heading">Dokumenty sprawy</h2>
+              <button class="docs-toggle" id="docs-toggle" type="button" aria-expanded="true" aria-controls="docs-body" title="Zwiń listę dokumentów">
+                <svg class="ic" aria-hidden="true"><use href="#i-collapse"/></svg>
+                <span class="sr-only" id="docs-toggle-label">Zwiń listę dokumentów</span>
+              </button>
+            </div>
+            <ol class="docs-mini" id="docs-mini" aria-label="Dokumenty sprawy (lista zwinięta)" hidden></ol>
 
+            <div class="docs-body" id="docs-body">
             <form id="upload-form" class="upload" novalidate>
               <div class="drop" id="drop">
                 <svg class="ic ic-lg" aria-hidden="true"><use href="#i-upload"/></svg>
@@ -131,6 +139,15 @@
                 <button id="retry-request" class="btn btn-line" type="button" hidden>Spróbuj ponownie</button>
               </div>
 
+              <section id="restore-box" class="restore" aria-labelledby="restore-title" hidden>
+                <h3 class="restore-title" id="restore-title">Przywrócić poprawki?</h3>
+                <p class="restore-text" id="restore-text"></p>
+                <div class="restore-buttons">
+                  <button id="restore-yes" class="btn" type="button">Przywróć</button>
+                  <button id="restore-no" class="btn btn-line" type="button">Nie, odrzuć</button>
+                </div>
+              </section>
+
               <div class="actions" id="actions" hidden>
                 <button id="retry-failed" class="btn btn-primary" type="button" hidden>Ponów błędne</button>
                 <button id="submit-btn" class="btn btn-primary" type="submit">Przetwórz pliki</button>
@@ -149,7 +166,9 @@
                 <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
                 <span id="download-all-label">Pobierz wszystkie JSON-y</span>
               </button>
+              <p class="unsaved-note" id="unsaved-note" hidden></p>
             </section>
+            </div>
           </section>
 
           <section class="sheet" id="sheet" aria-labelledby="sheet-heading">

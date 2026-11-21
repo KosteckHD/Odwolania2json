@@ -55,7 +55,7 @@ Identyfikatory (NIP, KRS, REGON, PESEL), daty i numery rachunków są wpisane w 
 
 ## Układ
 
-Menu wysuwane z boku na każdym ekranie (przycisk ☰ w górnym pasku, zamykanie kliknięciem obok, wyborem albo Esc), górny pasek z trzema krokami, kolumna „Dokumenty sprawy” i arkusz wybranego dokumentu. Poniżej 1180 px arkusz schodzi pod listę.
+Menu wysuwane z boku na każdym ekranie (przycisk ☰ w górnym pasku, zamykanie kliknięciem obok, wyborem albo Esc), górny pasek z trzema krokami, kolumna „Dokumenty sprawy” i arkusz wybranego dokumentu. Poniżej 1180 px arkusz schodzi pod listę. Na komputerze kolumnę „Dokumenty sprawy” można zwinąć do paska numerów dokumentów (kolor statusu na dolnej krawędzi, kwadracik = poprawiony), żeby rubryki i PDF miały więcej miejsca. W oknach niższych niż 820 px górny pasek i nagłówek arkusza są niższe.
 
 ## Ruch
 
