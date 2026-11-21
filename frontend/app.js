@@ -906,6 +906,19 @@ function setManualType(index, type) {
   el.sheet.querySelector(".fields-pane input, .fields-pane textarea")?.focus();
 }
 
+/** Źródło pola: otwiera podgląd (gdy schowany), przechodzi do strony i podświetla fragment. */
+function showSource(index, page, text) {
+  if (!state.showPdf || state.pdfFull) {
+    state.showPdf = true;
+    try { localStorage.setItem("o2j-pdf", "1"); } catch { /* bez pamięci */ }
+    renderDocbar();
+    renderSheet();
+  }
+  const viewer = viewers.get(state.files[index]);
+  viewer?.element.showSource?.(page, text == null ? null : String(text));
+  announce(`Podgląd PDF: strona ${page}.`);
+}
+
 /** Powrót do rozpoznania modelu (wpis sprzed ręcznej zmiany typu). */
 function revertManualType(index) {
   const previous = state.results[index]?.previous;
@@ -1011,7 +1024,11 @@ function evidenceMap(entry) {
   const map = new Map();
   for (const ev of entry.evidence ?? []) {
     if (!ev?.field_path) continue;
-    map.set(ev.field_path, [ev.page_number && `str. ${ev.page_number}`, ev.method].filter(Boolean).join(" · "));
+    map.set(ev.field_path, {
+      label: [ev.page_number && `str. ${ev.page_number}`, ev.method].filter(Boolean).join(" · "),
+      page: ev.page_number ?? null,
+      text: ev.text ?? null,
+    });
   }
   return map;
 }
@@ -1249,7 +1266,17 @@ function fieldBlock(field, value, ctx, path) {
       tags.append(tag("field-note", "brak w dokumencie"));
     } else {
       const source = ctx.evidence.get(path);
-      if (source) tags.append(tag("field-source", source));
+      if (source?.page) {
+        // klikalne źródło: strona w podglądzie i podświetlony fragment
+        const b = Object.assign(node("button", "link-btn field-source", source.label), { id: `${id}-info`, type: "button" });
+        b.title = "Pokaż w podglądzie PDF";
+        b.setAttribute("aria-label", `Źródło: ${source.label}. Pokaż w podglądzie PDF`);
+        b.addEventListener("click", (event) => {
+          event.preventDefault();
+          showSource(index, source.page, source.text ?? current);
+        });
+        tags.append(b);
+      } else if (source?.label) tags.append(tag("field-source", source.label));
     }
   };
 

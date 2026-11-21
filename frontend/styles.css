@@ -677,3 +677,9 @@ main:focus { outline: none; }   /* fokus programowy po zmianie widoku: bez ramki
 .retype .type-pick { margin-bottom: 0; }
 .col-manual { font-size: 12.5px; font-weight: 400; color: var(--ink-soft); }
 .col-manual::before { content: "· "; }
+
+/* źródło pola w podglądzie PDF: delikatne tło pod fragmentem (multiply: tekst z kanwy zostaje czytelny) */
+.textLayer { mix-blend-mode: multiply; }   /* tło pod fragmentem mnoży się z kanwą, tekst zostaje widoczny */
+.textLayer span.is-source { background: var(--rule-soft); }
+.field-tags .field-source { font-size: 12.5px; color: var(--ink-soft); }
+.field-tags button.field-source:hover { color: var(--ink); }

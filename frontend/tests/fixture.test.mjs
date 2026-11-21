@@ -65,3 +65,15 @@ test("każda rubryka DOC_TYPES ma klucz we wpisie ok tego typu", () => {
     }
   }
 });
+
+test("evidence w próbce: ścieżki wskazują istniejące pola, strony od 1, metoda podana", () => {
+  const withEvidence = okEntries.filter((d) => Array.isArray(d.evidence) && d.evidence.length);
+  assert.ok(withEvidence.length > 0, "atrapa powinna pokazywać źródła pól");
+  for (const doc of withEvidence) {
+    for (const ev of doc.evidence) {
+      assert.notEqual(getPath(doc.data, ev.field_path), undefined, `${doc.filename}: ${ev.field_path}`);
+      assert.ok(Number.isInteger(ev.page_number) && ev.page_number >= 1, ev.field_path);
+      assert.equal(typeof ev.method, "string");
+    }
+  }
+});

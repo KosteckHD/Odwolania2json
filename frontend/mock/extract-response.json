@@ -42,7 +42,51 @@
           "numer_ted": "641651-2025",
           "tytul": "Wykonanie robót budowlanych oraz dostawa i montaż wyposażenia w ramach zadania, polegającego na przebudowie i rozbudowie Filharmonii Pomorskiej w Bydgoszczy"
         }
-      }
+      },
+      "evidence": [
+        {
+          "field_path": "OdwolanieKIO.data",
+          "page_number": 1,
+          "method": "llm+search",
+          "text": "13.10.2025"
+        },
+        {
+          "field_path": "OdwolanieKIO.miejscowosc",
+          "page_number": 1,
+          "method": "llm+search",
+          "text": "Pruszkow"
+        },
+        {
+          "field_path": "Odwolujacy.0.nazwa",
+          "page_number": 1,
+          "method": "llm+search",
+          "text": "STRABAG Sp. z o.o."
+        },
+        {
+          "field_path": "Odwolujacy.0.krs",
+          "page_number": 1,
+          "method": "regex",
+          "text": "0000 054 588"
+        },
+        {
+          "field_path": "Odwolujacy.0.pelnomocnik.mail",
+          "page_number": 1,
+          "method": "llm+search",
+          "text": "info@prawnik.xy"
+        },
+        {
+          "field_path": "Zamawiajacy.0.nip",
+          "page_number": 1,
+          "method": "regex",
+          "text": "554-024-05-49"
+        },
+        {
+          "field_path": "Zamawiajacy.0.regon",
+          "page_number": 1,
+          "method": "regex",
+          "text": "000279077"
+        }
+      ]
     },
     {
       "filename": "pelnomocnictwo.pdf",
@@ -58,11 +102,40 @@
               "nip": "8361772283",
               "typ": "osoba_prawna"
             },
-            "podpisujacy": [{ "imie_nazwisko": "Paweł Podolski" }]
+            "podpisujacy": [
+              {
+                "imie_nazwisko": "Paweł Podolski"
+              }
+            ]
           }
         ],
-        "pelnomocnicy": [{ "imie_nazwisko": "Krystyna Mazowiecka", "pesel": 85120133547 }]
-      }
+        "pelnomocnicy": [
+          {
+            "imie_nazwisko": "Krystyna Mazowiecka",
+            "pesel": 85120133547
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "field_path": "mocodawca.0.data.krs",
+          "page_number": 1,
+          "method": "regex",
+          "text": "0000244633"
+        },
+        {
+          "field_path": "mocodawca.0.data.nip",
+          "page_number": 1,
+          "method": "regex",
+          "text": "836-177-22-83"
+        },
+        {
+          "field_path": "pelnomocnicy.0.pesel",
+          "page_number": 1,
+          "method": "llm+search",
+          "text": "85120133547"
+        }
+      ]
     },
     {
       "filename": "potwierdzenie_przelewu.pdf",
@@ -77,7 +150,27 @@
           "tytul": "WPIS OD ODW., ZAM: ZESPÓŁ SZKÓŁ CENTRUM KSZTAŁCENIA ROLNICZEGO IM. KEN W HENRYKOWIE, ZSCKR/822/2025, BUDOWA DR. POŻAR.",
           "z_rachunku": "508020546000005888744244"
         }
-      }
+      },
+      "evidence": [
+        {
+          "field_path": "przelew_bankowy.data_operacji",
+          "page_number": 1,
+          "method": "regex",
+          "text": "09.10.2025"
+        },
+        {
+          "field_path": "przelew_bankowy.kwota",
+          "page_number": 1,
+          "method": "regex",
+          "text": "10 000,00 PLN"
+        },
+        {
+          "field_path": "przelew_bankowy.na_rachunek",
+          "page_number": 1,
+          "method": "llm+search",
+          "text": "60 1010 1010 0081 3622 3100 0000"
+        }
+      ]
     },
     {
       "filename": "ogloszenie.pdf",
@@ -90,7 +183,10 @@
       "status": "error",
       "type": null,
       "data": null,
-      "error": { "code": "ocr_required", "message": "Dokument wymaga odczytu OCR." }
+      "error": {
+        "code": "ocr_required",
+        "message": "Dokument wymaga odczytu OCR."
+      }
     }
   ]
 }

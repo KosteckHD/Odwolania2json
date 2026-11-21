@@ -95,6 +95,44 @@ export function createPdfViewer(file, url, title) {
     pick.lines = null;          // nowa strona albo skala: wiersze liczymy od nowa
     pick.cursor = pick.anchor = -1;
     showHint();
+    if (view.mark) markSource(view.mark);
+  };
+
+  /* ---------- źródło pola: strona z evidence i podświetlony fragment ---------- */
+
+  /** Tekst do porównań: małe litery, bez polskich znaków, odstępów i interpunkcji. */
+  const norm = (t) => String(t ?? "").normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/ł/gi, "l")
+    .toLowerCase().replace(/[^a-z0-9@]/g, "");
+  /** Warianty szukanego tekstu: data ISO szukana też jako DD.MM.RRRR. */
+  const variants = (t) => {
+    const out = [norm(t)];
+    const iso = String(t).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) out.push(norm(`${iso[3]}${iso[2]}${iso[1]}`));
+    return out.filter((v) => v.length >= 2);
+  };
+  function markSource(text) {
+    stage.querySelectorAll(".is-source").forEach((s) => s.classList.remove("is-source"));
+    const wanted = variants(text);
+    if (!wanted.length || !hasText()) return;
+    const lines = collectLines();
+    const hits = lines.filter((line) => wanted.some((w) => norm(line.text).includes(w)));
+    hits.forEach((line) => line.spans.forEach((s) => s.classList.add("is-source")));
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // przewijamy tylko podgląd (scrollIntoView przesunąłby też całą stronę panelu)
+    const first = hits[0]?.spans[0];
+    if (first && stage.scrollHeight > stage.clientHeight) {
+      const r = first.getBoundingClientRect(), box = stage.getBoundingClientRect();
+      stage.scrollTo({ top: stage.scrollTop + r.top - box.top - stage.clientHeight / 2, behavior: reduce ? "auto" : "smooth" });
+    }
+  }
+
+  /** Przejście do strony z evidence i podświetlenie fragmentu (tekst z evidence albo wartość pola). */
+  element.showSource = async (pageNumber, text) => {
+    await ready;
+    if (!view.doc) return;
+    view.page = Math.min(view.doc.numPages, Math.max(1, Number(pageNumber) || 1));
+    view.mark = text ?? null;
+    await draw();
   };
 
   /* ---------- wybór wiersza z klawiatury (odpowiednik zaznaczania myszą) ---------- */
@@ -205,12 +243,16 @@ export function createPdfViewer(file, url, title) {
     timer = setTimeout(draw, 120);
   }).observe(stage);
 
+  let markReady;
+  const ready = new Promise((resolve) => { markReady = resolve; });
   (async () => {
     try {
       view.lib = await loadPdfJs();
       view.doc = await view.lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
       await draw();
+      markReady();
     } catch (error) {
+      markReady();
       console.warn("PDF.js niedostępny, używam wbudowanej przeglądarki:", error);
       element.querySelector(".pdfv-bar").hidden = true;
       status.textContent = "Zaznaczanie tekstu niedostępne dla tego pliku. Poniżej zwykły podgląd.";
