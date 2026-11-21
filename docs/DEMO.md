@@ -75,12 +75,13 @@ Uczciwie: przykładowa czwarta klasa była testowana z Sonnetem na jednym syntet
 
 **Mówimy:** liczby z [`docs/MODEL_COMPARISON.md`](MODEL_COMPARISON.md), zawsze z dopiskiem „lokalnie, na syntetycznych danych UZP”. Następnie: docelowy model otwarty w UE/EOG (do uzupełnienia) i pilotaż w urzędzie.
 
-### Opcjonalnie (+30 s) · Brudny skan · *F1 na skanach, transparentność*
+### Opcjonalnie (+30 s) · Skan · *F1 na skanach, transparentność*
 
-Pokazujemy tylko wtedy, gdy przed finałem przejdzie próba z prawdziwym OCR. **Do uzupełnienia.**
+Szczegóły i pomiary: [`docs/SKANY.md`](SKANY.md).
 
-- Przygotowanie: wydrukować syntetyczny PDF UZP, dopisać długopisem podpis, przybić pieczątkę, zgiąć kartkę, zeskanować albo sfotografować telefonem. Taki skan jest bardziej wiarygodny niż sztucznie zaszumiony.
-- Warunek: Tesseract z danymi `pol` w `PATH` (albo kontener Docker, który go instaluje). Na komputerze, na którym przygotowano ten scenariusz, Tesseracta nie ma, więc skan skończy się błędem `ocr_required` ([10-blad-ocr.png](demo/10-blad-ocr.png)).
+- Materiał: skan z `dane/skany/` repozytorium UZP (np. pełnomocnictwo albo przelew, bo OCR zajmuje 1–2 s; odwołanie ze skanu to 10–17 s samego OCR). Na tych skanach w tekście po OCR jest 238 z 266 wartości pól (89,5%). Model w tym pomiarze nie brał udziału.
+- Warunek: Tesseract z `pol` na komputerze z backendem (albo Docker). Bez niego skan dostaje błąd `ocr_required` ([10-blad-ocr.png](demo/10-blad-ocr.png)).
+- Na scenie mówimy: „Skan nie ma tekstu, więc przed modelem czyta go OCR. Wynik sprawdzamy obok oryginału.” Zaznaczania tekstu w PDF-ie na skanie nie pokazujemy, bo skan nie ma warstwy tekstu; panel mówi to nad podglądem.
 - Jeśli OCR nie działa, mówimy: „Skan bez warstwy tekstu dostaje jasny błąd, a reszta sprawy przechodzi”, i pokazujemy zrzut 10.
 
 ## Plan B: API albo model nie działa
@@ -121,7 +122,7 @@ Z testu zespołu z modelem Haiku na `przyklad_01` (wynik nie jest zapisany w rep
 - [ ] Rozstrzygnięty wariant A albo B. Przy wariancie A panel i API działają pod jednym adresem.
 - [ ] Jedna pełna próba z zegarkiem: mieścimy się w 3:45.
 - [ ] Liczby na slajdzie 6 zgadzają się z `docs/MODEL_COMPARISON.md` (albo z nowym pomiarem na modelu docelowym).
-- [ ] Jeśli pokazujemy skan: Tesseract + `pol` zainstalowane, skan przetestowany.
+- [ ] Jeśli pokazujemy skan: Tesseract + `pol` zainstalowane, skan UZP przetestowany na żywo.
 
 **15 minut przed**
 
