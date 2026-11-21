@@ -13,6 +13,9 @@
 //   enum    – wartość ze słownika (labels)
 //   names   – lista obiektów { imie_nazwisko }
 //
+// Grupa z `list: true` to lista pozycji (np. kilku pełnomocników); `item` to nazwa pozycji
+// w bierniku do przycisku „+ Dodaj …”.
+//
 // `hint` to krótka podpowiedź przy etykiecie. UZP chce imion i nazwisk w mianowniku
 // („Mateusz Szymański”, nie „Mateusza Szymańskiego”), a w pismach bywają odmienione.
 
@@ -35,6 +38,7 @@ export const DOC_TYPES = {
         title: "Odwołujący",
         path: "Odwolujacy",
         list: true,
+        item: "odwołującego",
         fields: [
           { key: "nazwa", label: "Nazwa", kind: "text", wide: true },
           { key: "krs", label: "Numer KRS", kind: "digits" },
@@ -50,6 +54,7 @@ export const DOC_TYPES = {
         title: "Zamawiający",
         path: "Zamawiajacy",
         list: true,
+        item: "zamawiającego",
         fields: [
           { key: "nazwa", label: "Nazwa", kind: "text", wide: true },
           { key: "krs", label: "Numer KRS", kind: "digits" },
@@ -78,6 +83,7 @@ export const DOC_TYPES = {
         title: "Mocodawca",
         path: "mocodawca",
         list: true,
+        item: "mocodawcę",
         fields: [
           { key: "data.nazwa", label: "Nazwa", kind: "text", wide: true },
           { key: "data.typ", label: "Rodzaj podmiotu", kind: "enum", labels: { osoba_prawna: "Osoba prawna", osoba_fizyczna: "Osoba fizyczna" } },
@@ -91,6 +97,7 @@ export const DOC_TYPES = {
         title: "Pełnomocnik",
         path: "pelnomocnicy",
         list: true,
+        item: "pełnomocnika",
         fields: [
           { key: "imie_nazwisko", label: "Imię i nazwisko", kind: "text", hint: "w mianowniku" },
           { key: "pesel", label: "PESEL", kind: "digits", integer: true },
@@ -125,4 +132,21 @@ export function typeLabel(type) {
 /** Odczyt wartości po ścieżce z kropkami, np. "pelnomocnik.nazwa". */
 export function getPath(object, path) {
   return path.split(".").reduce((value, key) => (value == null ? undefined : value[key]), object);
+}
+
+/**
+ * Pusta pozycja listy: ta sama struktura co wzór (np. pierwsza pozycja od modelu),
+ * a gdy wzoru brak, struktura z kluczy rubryk. Liście dostają null, tablice [].
+ */
+export function emptyListItem(fields, template = null) {
+  const blank = (v) => (Array.isArray(v) ? [] : v && typeof v === "object"
+    ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, blank(x)])) : null);
+  const item = template && typeof template === "object" && !Array.isArray(template) ? blank(template) : {};
+  for (const f of fields) {
+    const keys = f.key.split(".");
+    let target = item;
+    keys.slice(0, -1).forEach((k) => { if (!target[k] || typeof target[k] !== "object") target[k] = {}; target = target[k]; });
+    if (!(keys.at(-1) in target)) target[keys.at(-1)] = f.kind === "names" ? [] : null;
+  }
+  return item;
 }

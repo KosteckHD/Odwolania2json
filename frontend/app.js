@@ -1,5 +1,5 @@
 import { ApiError, extractWithApi, extractWithMock, fetchDocumentTypes } from "./api.js";
-import { DOC_TYPES, getPath, typeLabel } from "./fields.js";
+import { DOC_TYPES, emptyListItem, getPath, typeLabel } from "./fields.js";
 import { zipStore } from "./zip.js";
 import { createPdfViewer } from "./pdfview.js";
 import { STATUS, docsSummary, insertPlacement, positionText, progressText } from "./layout.js";
@@ -1035,13 +1035,7 @@ function fieldsView(index, entry) {
   for (const group of spec.groups) {
     const value = data?.[group.path];
     if (group.list) {
-      // pusta lista: pokazujemy puste rubryki pierwszej pozycji, żeby dało się je uzupełnić
-      const items = Array.isArray(value) && value.length ? value : [{}];
-      items.forEach((item, i) => {
-        const title = items.length > 1 ? `${group.title} ${i + 1}` : group.title;
-        wrap.append(groupBlock(title, group.fields.map((f) =>
-          fieldBlock(f, getPath(item, f.key), ctx, `${group.path}.${i}.${f.key}`))));
-      });
+      wrap.append(...listGroup(group, value, ctx));
     } else {
       wrap.append(groupBlock(group.title, group.fields.map((f) =>
         fieldBlock(f, getPath(value, f.key), ctx, `${group.path}.${f.key}`))));
@@ -1050,9 +1044,78 @@ function fieldsView(index, entry) {
   return wrap;
 }
 
-function groupBlock(title, children) {
+/**
+ * Grupa z listą pozycji (np. kilku pełnomocników): „Usuń” przy tytule pozycji, gdy jest ich więcej
+ * niż jedna, i cichy „+ Dodaj …” pod ostatnią. Zmiana listy to poprawka jak każda inna
+ * (licznik, „poprawione · cofnij”, kopia robocza, eksport).
+ */
+function listGroup(group, value, ctx) {
+  const index = ctx.index;
+  const listPath = group.path;
+  // pusta lista: pokazujemy puste rubryki pierwszej pozycji, żeby dało się je uzupełnić
+  const items = Array.isArray(value) && value.length ? value : [{}];
+  const original = getPath(state.results[index].data, listPath);
+  const countChanged = (Array.isArray(original) ? original.length : 0) !== (Array.isArray(value) ? value.length : 0);
+  const noun = group.item ?? "pozycję";
+  const blocks = items.map((item, i) => {
+    const title = items.length > 1 ? `${group.title} ${i + 1}` : group.title;
+    const extra = [];
+    if (i === 0 && countChanged) {
+      const undo = node("button", "link-btn", "cofnij");
+      undo.type = "button";
+      undo.setAttribute("aria-label", `Cofnij zmiany listy: ${group.title}`);
+      undo.addEventListener("click", () => {
+        setValue(index, listPath, structuredClone(original ?? []));
+        renderSheet();
+        refreshAfterEdit(index);
+        announce(`Przywrócono listę: ${group.title}.`);
+      });
+      extra.push(node("span", null, "lista poprawiona"), undo);
+    }
+    if (items.length > 1) {
+      const remove = node("button", "link-btn", "Usuń");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Usuń pozycję: ${title}`);
+      remove.addEventListener("click", () => {
+        const next = structuredClone(items);
+        next.splice(i, 1);
+        setValue(index, listPath, next);
+        renderSheet();
+        refreshAfterEdit(index);
+        announce(`Usunięto: ${title}. Zmianę można cofnąć.`);
+        el.sheet.querySelectorAll(".group-add")[0]?.focus();
+      });
+      extra.push(remove);
+    }
+    return groupBlock(title, group.fields.map((f) =>
+      fieldBlock(f, getPath(item, f.key), ctx, `${listPath}.${i}.${f.key}`)), extra);
+  });
+  const add = node("button", "link-btn group-add", `+ Dodaj ${noun}`);
+  add.type = "button";
+  add.addEventListener("click", () => {
+    const current = Array.isArray(value) ? structuredClone(value) : [];
+    current.push(emptyListItem(group.fields, current[0] ?? original?.[0] ?? null));
+    setValue(index, listPath, current);
+    renderSheet();
+    refreshAfterEdit(index);
+    announce(`Dodano pustą pozycję: ${group.title} ${current.length}.`);
+    // fokus na pierwszą rubrykę nowej pozycji
+    const prefix = `f-${index}-${listPath.replace(/[^\w]/g, "_")}_${current.length - 1}_`;
+    el.sheet.querySelector(`input[id^="${prefix}"], textarea[id^="${prefix}"]`)?.focus();
+  });
+  blocks.at(-1).append(add);
+  return blocks;
+}
+
+function groupBlock(title, children, extra = []) {
   const section = node("section", "group");
-  section.append(node("h3", "group-title", title));
+  const head = node("h3", "group-title", title);
+  if (extra.length) {
+    const tags = node("span", "group-tags");
+    tags.append(...extra);
+    head.append(tags);
+  }
+  section.append(head);
   const grid = node("div", "fields");
   grid.append(...children);
   section.append(grid);

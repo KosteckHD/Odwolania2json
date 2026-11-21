@@ -285,6 +285,13 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 /* ---------- rubryki ---------- */
 .group { margin-bottom: 22px; }
 .group-title { font-size: 14px; font-weight: 600; color: var(--form); padding-bottom: 6px; margin-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
+/* dopiski przy tytule pozycji listy i „+ Dodaj …”: ciche, drobne, jak dopiski przy rubrykach */
+.group-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.group-tags { display: inline-flex; align-items: baseline; gap: 4px; font-size: 12.5px; font-weight: 400; color: var(--ink-soft); }
+.group-tags > * + *::before { content: "· "; display: inline-block; white-space: pre; text-decoration: none; }
+.group-tags .link-btn { font-size: 12.5px; }
+.group-add { margin-top: 12px; font-size: 13px; color: var(--form); }
+.group-add:hover { color: var(--brand-hover); }
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px 22px; }
 .field { min-width: 0; }
 .field-wide, .field-account, .field-names { grid-column: 1 / -1; }
