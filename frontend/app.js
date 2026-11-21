@@ -1,6 +1,7 @@
 import { ApiError, extractWithApi, extractWithMock, fetchDocumentTypes } from "./api.js";
 import { DOC_TYPES, emptyListItem, getPath, typeLabel } from "./fields.js";
 import { zipStore } from "./zip.js";
+import { buildResultFiles, jsonName, retypeEntry, safeName } from "./export.js";
 import { createPdfViewer } from "./pdfview.js";
 import { STATUS, docsSummary, insertPlacement, positionText, progressText } from "./layout.js";
 import { expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
@@ -33,6 +34,7 @@ const state = {
   restore: null,      // kopia robocza tej samej sprawy z pamięci przeglądarki, czeka na decyzję
   confirmRerun: false,   // „Przetwórz ponownie” czeka na drugie kliknięcie (są poprawki)
   confirmDocRetry: null, // „Przetwórz ten plik ponownie” czeka na drugie kliknięcie (pozycja)
+  retypeOpen: null,      // pozycja dokumentu z otwartym wyborem nowego typu
 };
 
 const viewers = new WeakMap(); // File → podgląd PDF (renderowany raz)
@@ -102,6 +104,7 @@ const el = {
   docOptions: $("doc-options"), docOptionsMenu: $("doc-options-menu"),
   docRetry: $("doc-retry"), docRetryLabel: $("doc-retry-label"), docRetryNote: $("doc-retry-note"),
   docPdfToggle: $("doc-pdf-toggle"), docPdfLabel: $("doc-pdf-label"),
+  docRetype: $("doc-retype"), docRevert: $("doc-revert"), docRevertNote: $("doc-revert-note"),
 };
 
 /* ---------- nawigacja ---------- */
@@ -167,7 +170,7 @@ function resetCase() {
   Object.assign(state, {
     caseName: null, files: [], urls: [], results: null, meta: null,
     notice: null, lastRun: null, selected: null, pending: false, pendingSet: null, abort: null, slow: false,
-    edits: [], active: null, saved: [], restore: null, confirmRerun: false, confirmDocRetry: null,
+    edits: [], active: null, saved: [], restore: null, confirmRerun: false, confirmDocRetry: null, retypeOpen: null,
   });
   draftWritten = false;
   el.input.value = "";
@@ -280,6 +283,7 @@ function removeFile(index) {
 function selectDocument(index) {
   if (state.selected === index) return;
   state.confirmDocRetry = null;
+  state.retypeOpen = null;
   state.selected = index;
   state.active = null;
   state.pdfFull = false;
@@ -567,6 +571,7 @@ function renderDocRow(file, index) {
     const c = completeness(entry, dataAt(index));
     if (c) meta.append(node("span", null, `${c.filled}/${c.total} pól`));
     const edits = countEdits(index);
+    if (entry.manualType) meta.append(node("span", "doc-edited", "typ ręcznie"));
     if (edits) meta.append(node("span", "doc-edited", `${edits} ${plural(edits, "poprawka", "poprawki", "poprawek")}`));
   }
   text.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "doc-name", file.name), meta);
@@ -610,6 +615,12 @@ function renderDocbar() {
     : "Przetwórz ten plik ponownie";
   el.docRetryNote.textContent = edits && state.confirmDocRetry !== index ? "poprawki w tym pliku przepadną" : "";
   el.docPdfLabel.textContent = state.showPdf ? "Ukryj podgląd PDF" : "Pokaż podgląd PDF";
+  el.docRetype.hidden = entry?.status !== "ok";
+  el.docRetype.disabled = state.pending;
+  el.docRevert.hidden = !entry?.manualType;
+  el.docRevertNote.textContent = entry?.previous
+    ? (entry.previous.status === "ok" ? `typ od modelu: ${typeLabel(entry.previous.type)}` : "model nie rozpoznał typu")
+    : "";
 }
 
 el.docPrev.addEventListener("click", () => selectDocument(Math.max(0, (state.selected ?? 0) - 1)));
@@ -631,6 +642,16 @@ el.docRetry.addEventListener("click", () => {
   state.confirmDocRetry = null;
   closePopovers({ focus: true });
   runExtraction([index]);
+});
+el.docRetype.addEventListener("click", () => {
+  state.retypeOpen = state.selected;
+  closePopovers();
+  renderSheet();
+  el.sheet.querySelector(".retype select")?.focus();
+});
+el.docRevert.addEventListener("click", () => {
+  closePopovers({ focus: true });
+  revertManualType(state.selected);
 });
 el.docPdfToggle.addEventListener("click", () => {
   state.showPdf = !state.showPdf;
@@ -736,20 +757,9 @@ function renderSummary() {
     : "";
 }
 
-/** Pliki wynikowe jak w output/<sprawa>/: JSON dla rozpoznanych, `{}` dla nierozpoznanych (wymóg UZP). */
+/** Pliki wynikowe jak w output/<sprawa>/ (export.js): JSON dla rozpoznanych, `{}` dla nierozpoznanych. */
 function resultFiles() {
-  if (!state.results) return [];
-  const folder = safeName(state.caseName ?? "sprawa");
-  const used = new Set();
-  const files = [];
-  state.results.forEach((r, i) => {
-    if (r.status !== "ok" && r.status !== "unknown") return;   // błąd: brak pliku, jak w CLI
-    let name = jsonName(state.files[i].name);
-    for (let k = 2; used.has(name); k++) name = jsonName(state.files[i].name).replace(/\.json$/, ` (${k}).json`);
-    used.add(name);
-    files.push({ name: `${folder}/${name}`, text: r.status === "ok" ? `${JSON.stringify(dataAt(i), null, 2)}\n` : "{}" });
-  });
-  return files;
+  return buildResultFiles({ files: state.files, results: state.results, dataAt, caseName: state.caseName });
 }
 
 function downloadZip() {
@@ -796,9 +806,10 @@ function renderSheet() {
     title.append(statusNode("unknown", entry, "col-status"));
     head.append(title);
     left = stateBlock("Nie rozpoznano typu dokumentu", [
-      "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie plik JSON z samym {}, zgodnie z wymogiem UZP.",
-      "Jeśli to jednak jeden z tych dokumentów, sprawdź w podglądzie, czy PDF jest kompletny i czytelny.",
+      "Model nie rozpoznał typu. Jeśli to jeden z obsługiwanych dokumentów, wybierz typ:",
     ]);
+    left.append(typePicker(index, null), node("p", "state-note",
+      "Bez wyboru typu plik trafi do wyników sprawy jako JSON z samym {}, zgodnie z wymogiem UZP."));
   } else if (entry.status === "error") {
     title.append(statusNode("error", entry, "col-status"));
     head.append(title);
@@ -813,6 +824,7 @@ function renderSheet() {
     if (entry.error?.code) left.append(node("p", "state-code", `Kod błędu: ${entry.error.code}`));
   } else {
     title.append(typeLabel(entry.type));
+    if (entry.manualType) title.append(node("span", "col-manual", "typ ustawiony ręcznie"));
     head.append(title, sheetModeSwitch());
     left = state.sheetMode === "json" ? jsonView(dataAt(index)) : fieldsView(index, entry);
     if (state.sheetMode === "fields") {
@@ -824,13 +836,87 @@ function renderSheet() {
 
   const body = node("div", "sheet-body");
   const pane = node("div", "fields-pane");
-  pane.append(head, left);
+  pane.append(head);
+  if (state.retypeOpen === index && entry.status === "ok") pane.append(retypePanel(index, entry));
+  pane.append(left);
   body.dataset.pdf = String(state.showPdf);
   body.dataset.full = String(state.showPdf && state.pdfFull);
   body.style.setProperty("--split", `${state.split}%`);
   if (state.showPdf) body.append(pane, splitter(body), pdfPane(index));
   else body.append(pane);
   el.sheet.replaceChildren(body);
+}
+
+/* ---------- ręczna zmiana typu dokumentu ---------- */
+
+/** Typy, które da się ustawić ręcznie: znane panelowi (fields.js). */
+function manualTypes() {
+  return Object.entries(DOC_TYPES).map(([id, t]) => ({ id, label: t.label }));
+}
+
+/** Lista typów i przycisk. `current` = typ, którego nie proponujemy (bieżący). */
+function typePicker(index, current, { confirmText = "Otwórz formularz", onCancel = null } = {}) {
+  const wrap = node("div", "type-pick");
+  const id = `type-pick-${index}`;
+  const label = node("label", "type-pick-label", "Typ dokumentu");
+  label.htmlFor = id;
+  const select = node("select", "wiz-in type-pick-select");
+  select.id = id;
+  select.append(Object.assign(node("option", null, "— wybierz —"), { value: "" }));
+  for (const t of manualTypes().filter((t) => t.id !== current)) select.append(Object.assign(node("option", null, t.label), { value: t.id }));
+  const go = node("button", "btn btn-line btn-sm", confirmText);
+  go.type = "button";
+  go.disabled = true;
+  select.addEventListener("change", () => { go.disabled = !select.value; });
+  go.addEventListener("click", () => select.value && setManualType(index, select.value));
+  const row = node("div", "type-pick-row");
+  row.append(select, go);
+  if (onCancel) {
+    const cancel = node("button", "link-btn", "Anuluj");
+    cancel.type = "button";
+    cancel.addEventListener("click", onCancel);
+    row.append(cancel);
+  }
+  wrap.append(label, row);
+  return wrap;
+}
+
+/** Potwierdzenie zmiany typu rozpoznanego dokumentu: pola bieżącego typu przepadną. */
+function retypePanel(index, entry) {
+  const box = node("section", "retype");
+  box.setAttribute("aria-label", "Zmiana typu dokumentu");
+  const edits = countEdits(index);
+  box.append(node("p", "retype-text",
+    `Zmiana typu usunie pola typu „${typeLabel(entry.type)}”${edits ? ` i ${edits} ${plural(edits, "poprawkę", "poprawki", "poprawek")}` : ""}. Otworzy się pusty formularz nowego typu do ręcznego wypełnienia.`));
+  box.append(typePicker(index, entry.type, {
+    confirmText: "Zmień typ",
+    onCancel: () => { state.retypeOpen = null; renderSheet(); el.docOptions.focus(); },
+  }));
+  return box;
+}
+
+function setManualType(index, type) {
+  state.results[index] = retypeEntry(state.results[index], type);
+  delete state.edits[index];
+  delete state.saved[index];
+  Object.assign(state, { retypeOpen: null, sheetMode: "fields", active: null });
+  render();
+  scheduleDraftSave();
+  announce(`Ustawiono typ: ${typeLabel(type)}. Formularz jest pusty, uzupełnij go ręcznie.`);
+  el.sheet.querySelector(".fields-pane input, .fields-pane textarea")?.focus();
+}
+
+/** Powrót do rozpoznania modelu (wpis sprzed ręcznej zmiany typu). */
+function revertManualType(index) {
+  const previous = state.results[index]?.previous;
+  if (!previous) return;
+  state.results[index] = previous;
+  delete state.edits[index];
+  delete state.saved[index];
+  state.retypeOpen = null;
+  render();
+  scheduleDraftSave();
+  announce("Przywrócono rozpoznanie modelu.");
 }
 
 /** „Formularz / JSON” w nagłówku kolumny formularza. */
@@ -1010,7 +1096,7 @@ function markSaved(positions) {
   renderSummary();
 }
 
-const unsaved = () => unsavedPositions({ results: state.results, edits: state.edits, saved: state.saved });
+const unsaved = () => unsavedPositions({ results: state.results, edits: state.edits, saved: state.saved });   // także ręczna zmiana typu
 
 window.addEventListener("beforeunload", (event) => {
   saveDraftNow();
@@ -1656,8 +1742,6 @@ function jsonView(data) {
   return pre;
 }
 
-const jsonName = (fileName) => `${fileName.replace(/\.pdf$/i, "")}.json`;
-const safeName = (name) => name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "sprawa";
 
 function downloadJson(fileName, data) {
   downloadBlob(jsonName(fileName), new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: "application/json" }));

@@ -40,10 +40,11 @@ export function buildDraft({ files, results, edits, meta = null, caseName = null
   let changes = 0, docsEdited = 0;
   const docs = files.map((file, i) => {
     const result = results[i] ?? null;
-    const n = countChanges(edits[i], result?.data);
+    const fields = countChanges(edits[i], result?.data);
+    const n = fields + (result?.manualType ? 1 : 0);   // ręcznie ustawiony typ to też poprawka
     changes += n;
     if (n) docsEdited += 1;
-    return { file: fileKey(file), result, edited: n ? edits[i] : null };
+    return { file: fileKey(file), result, edited: fields ? edits[i] : null };
   });
   if (!changes) return null;
   return { v: DRAFT_VERSION, key: caseKey(files), caseName, savedAt: now, meta, changes, docsEdited, docs };
@@ -106,8 +107,10 @@ export function alignDraft(draft, files) {
 export function unsavedPositions({ results, edits, saved = [] }) {
   if (!results) return [];
   const out = [];
-  edits.forEach((data, i) => {
-    if (!data || !countChanges(data, results[i]?.data)) return;
+  results.forEach((result, i) => {
+    const edited = edits[i] && countChanges(edits[i], result?.data);
+    if (!edited && !result?.manualType) return;   // ręczna zmiana typu zmienia eksport ({} → JSON typu)
+    const data = edited ? edits[i] : result.data;
     if (saved[i] !== JSON.stringify(data)) out.push(i);
   });
   return out;

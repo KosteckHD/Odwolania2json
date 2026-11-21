@@ -665,3 +665,15 @@ main:focus { outline: none; }   /* fokus programowy po zmianie widoku: bez ramki
 
 /* tryb atrapy: dyskretny znacznik */
 .mode-flag { padding: 1px 7px; background: none; border: 1px dashed var(--warn); font-size: 12.5px; }
+
+/* ręczna zmiana typu dokumentu */
+.type-pick { display: grid; gap: 5px; margin: 6px 0 10px; }
+.type-pick-label { font-size: 13px; color: var(--form); }
+.type-pick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.type-pick-select { width: auto; min-width: 220px; max-width: 100%; }
+.state-note { font-size: 13.5px !important; }
+.retype { display: grid; gap: 4px; margin: 0 0 18px; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); }
+.retype-text { font-size: 13.5px; }
+.retype .type-pick { margin-bottom: 0; }
+.col-manual { font-size: 12.5px; font-weight: 400; color: var(--ink-soft); }
+.col-manual::before { content: "· "; }
