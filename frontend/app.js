@@ -4,7 +4,7 @@ import { zipStore } from "./zip.js";
 import { buildResultFiles, jsonName, retypeEntry, safeName } from "./export.js";
 import { createPdfViewer } from "./pdfview.js";
 import { STATUS, docsSummary, insertPlacement, positionText, progressText } from "./layout.js";
-import { expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
+import { CHECKSUM_WARNING, checksumValid, expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
 import {
   DRAFT_STORAGE_KEY, alignDraft, buildDraft, caseKey, countChanges, describeDraft, findDraft,
   parseStore, plural, putDraft, unsavedPositions,
@@ -1272,6 +1272,12 @@ function fieldBlock(field, value, ctx, path) {
   targets = box.matches("input, textarea, [role=radiogroup]") ? [box] : [...box.querySelectorAll("input, textarea")];
   targets.forEach((t) => t.setAttribute("aria-describedby", `${id}-info ${id}-error`));
   wrap.append(head, box, error);
+  // wartość od modelu też sprawdzamy sumą kontrolną (bez zapisu: to tylko ostrzeżenie)
+  if (checksumValid(path, value) === false) {
+    error.hidden = false;
+    error.textContent = CHECKSUM_WARNING;
+    error.dataset.kind = "warn";
+  }
   const activate = () => {
     if (state.active?.path === path && state.active.index === index) return;
     state.active = { index, path, field, apply: control.apply, wrap };
@@ -1368,7 +1374,10 @@ function cellControl(field, value, id, commit, path) {
       const n = Number(digits);
       return n >= 1 && n <= 12 ? commit(n) : commit(null, "Kod powodu to liczba od 1 do 12.");
     }
-    commit(field.integer ? Number(digits) : digits);
+    const value = field.integer ? Number(digits) : digits;
+    // suma kontrolna (NIP, REGON, PESEL, rachunek): ostrzeżenie, wartość i tak zostaje zapisana
+    if (checksumValid(path, digits) === false) return commit(value, CHECKSUM_WARNING, true);
+    commit(value);
   };
   input.addEventListener("input", save);
   input.addEventListener("blur", () => {
