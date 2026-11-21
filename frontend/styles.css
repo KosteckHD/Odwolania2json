@@ -340,6 +340,12 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
   opacity: 0; font-size: 16px; color: transparent; caret-color: transparent; background: none; cursor: text;
 }
 .cells-sm { --cw: 19px; }
+/* rachunek: przełącznik przedrostka „PL” przed kratkami */
+.acct-in { display: flex; align-items: flex-start; gap: 6px; max-width: 100%; }
+.acct-prefix { flex: none; min-width: 34px; height: 30px; padding: 0 6px; border: 1px dashed var(--rule); background: var(--sheet); color: var(--ink-soft); font: 600 13px var(--font); letter-spacing: .04em; cursor: pointer; }
+.acct-prefix[aria-pressed="true"] { border-style: solid; border-color: var(--form); color: var(--form); }
+.acct-prefix:hover { border-color: var(--form-soft); }
+.acct-prefix:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .cells-sm .cells-row i { font-size: 14px; }
 .field[data-invalid="true"] .cells-row i { border-color: var(--bad); }
 .date-in { display: flex; align-items: center; }

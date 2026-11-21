@@ -1448,6 +1448,21 @@ function cellControl(field, value, id, commit, path) {
   const gaps = field.kind === "account" && lengths.includes(26) ? [2, 6, 10, 14, 18, 22] : [];
   const { box, paint } = cellsBox(input, () => (field.kind === "code" ? 2 : lengths[0] ?? 10), gaps);
   if (field.kind === "account") box.classList.add("cells-sm");
+  // rachunek: przedrostek „PL” zostaje, jeśli jest w dokumencie (UZP: numer jak w dokumencie)
+  let prefix = field.kind === "account" && /^\s*PL/i.test(String(value ?? "")) ? "PL" : "";
+  let prefixBtn = null;
+  if (field.kind === "account") {
+    prefixBtn = node("button", "acct-prefix", "PL");
+    prefixBtn.type = "button";
+    prefixBtn.title = "Przedrostek kraju w numerze rachunku: zostaw, jeśli jest w dokumencie";
+    const syncPrefix = () => {
+      prefixBtn.setAttribute("aria-pressed", String(prefix === "PL"));
+      prefixBtn.setAttribute("aria-label", prefix ? "Przedrostek PL: jest. Kliknij, aby usunąć" : "Przedrostek PL: brak. Kliknij, aby dodać");
+    };
+    syncPrefix();
+    prefixBtn.addEventListener("click", () => { prefix = prefix ? "" : "PL"; syncPrefix(); save(); });
+    prefixBtn.syncPrefix = syncPrefix;
+  }
   const save = () => {
     const digits = input.value.replace(/\D/g, "");
     if (digits !== input.value) { input.value = digits; paint(); }
@@ -1456,7 +1471,7 @@ function cellControl(field, value, id, commit, path) {
       const n = Number(digits);
       return n >= 1 && n <= 12 ? commit(n) : commit(null, "Kod powodu to liczba od 1 do 12.");
     }
-    const value = field.integer ? Number(digits) : digits;
+    const value = field.integer ? Number(digits) : field.kind === "account" ? prefix + digits : digits;
     // suma kontrolna (NIP, REGON, PESEL, rachunek): ostrzeżenie, wartość i tak zostaje zapisana
     if (checksumValid(path, digits) === false) return commit(value, CHECKSUM_WARNING, true);
     commit(value);
@@ -1468,11 +1483,17 @@ function cellControl(field, value, id, commit, path) {
       commit(field.integer ? Number(d) : d, `Sprawdź: zwykle ${lengths.join(" lub ")} cyfr, wpisano ${d.length}.`, true);
     }
   });
+  let element = box;
+  if (prefixBtn) {
+    element = node("div", "acct-in");
+    element.append(prefixBtn, box);
+  }
   return {
-    element: box,
+    element,
     apply(textFromPdf) {
       const code = pickCode(textFromPdf);
       const digits = field.kind === "code" ? (code ? String(code).padStart(2, "0") : "") : pickDigits(textFromPdf, lengths);
+      if (prefixBtn) { prefix = /PL\s*\d/i.test(String(textFromPdf)) ? "PL" : ""; prefixBtn.syncPrefix(); }
       input.value = digits.slice(0, max);
       save();
       input.focus();
