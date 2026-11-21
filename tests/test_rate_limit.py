@@ -104,3 +104,51 @@ def test_concurrent_requests_share_one_coordinator(monkeypatch):
                                                            RateLimitSettings(1, 0, 10)), range(8)))
     assert len(results) == len(calls) == 8
     assert clock.waits == [1] * 7
+
+
+def test_concurrency_allows_parallel_requests_and_limits_them():
+    import threading
+    import time as clock
+    from kio_extract.providers.rate_limit import RateLimitSettings, RequestCoordinator
+
+    active, peak = 0, 0
+    guard = threading.Lock()
+
+    class SlowConnection:
+        def __init__(self, host, port, timeout):
+            pass
+
+        def request(self, method, path, body, headers):
+            nonlocal active, peak
+            with guard:
+                active += 1
+                peak = max(peak, active)
+
+        def getresponse(self):
+            clock.sleep(0.2)
+            nonlocal active
+            with guard:
+                active -= 1
+            return type("R", (), {"status": 200, "getheader": lambda self, name: None, "read": lambda self: b"{}"})()
+
+        def close(self):
+            pass
+
+    def run(concurrency):
+        nonlocal peak
+        peak = 0
+        coordinator = RequestCoordinator()
+        settings = RateLimitSettings(interval=0, retries=0, max_wait=1, concurrency=concurrency)
+        threads = [threading.Thread(target=coordinator.post, args=(SlowConnection, "h", 1, "/", b"", {}, settings))
+                   for _ in range(6)]
+        started = clock.monotonic()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        return clock.monotonic() - started, peak
+
+    elapsed, most = run(3)
+    assert most == 3 and elapsed < 0.9
+    elapsed, most = run(1)
+    assert most == 1 and elapsed >= 1.1

@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 from http.client import HTTPConnection, HTTPSConnection
 from urllib.parse import urlsplit
 
@@ -25,6 +26,14 @@ def extra_body_from_environment() -> dict:
 
 
 class ChatClient:
+    @property
+    def last_usage(self):
+        return getattr(self._local, "usage", None)
+
+    @last_usage.setter
+    def last_usage(self, value):
+        self._local.usage = value
+
     def __init__(self, base_url: str, model: str, api_key: str, extra_body: dict | None = None):
         try:
             url = urlsplit(base_url)
@@ -43,6 +52,7 @@ class ChatClient:
         self.port = port
         self.connection = HTTPSConnection if url.scheme == "https" else HTTPConnection
         self.path = url.path.rstrip("/") + "/chat/completions"
+        self._local = threading.local()   # zużycie tokenów osobno dla każdego wątku CLI
         self.model = model
         self.extra_body = dict(extra_body or {})
         self.rate_limit = RateLimitSettings.from_environment()

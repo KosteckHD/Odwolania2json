@@ -101,7 +101,7 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
 
     class FakeConnection:
         def __init__(self, host, port, timeout):
-            assert (host, port, timeout) == ("localhost", 8765, 60)
+            assert (host, port, timeout) == ("localhost", 8765, 90.0)
 
         def request(self, method, path, *, body, headers):
             assert (method, path) == ("POST", "/v1/chat/completions")

@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -58,12 +59,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Błąd: {exc}", file=sys.stderr)
         return 2
 
-    counts: Counter[str] = Counter()
-    failures = 0
-    results = []
-    for source, destination in jobs:
+    def process_one(source, destination):
+        """Jeden PDF: wynik zapisany od razu po przetworzeniu (przy limicie czasu zostaje to, co gotowe)."""
         name = source.relative_to(input_dir)
         started = time.monotonic()
+        output = destination.relative_to(output_dir).as_posix()
         if client is not None and hasattr(client, "last_usage"):
             client.last_usage = None
         try:
@@ -72,31 +72,38 @@ def main(argv: list[str] | None = None) -> int:
             write_result(destination, data, args.negative_output)
             digest = hashlib.sha256(destination.read_bytes()).hexdigest() if report_path else None
         except DocumentError as exc:
-            print(f"{name}: {exc.code}: {exc}", file=sys.stderr)
-            failures += 1
-            entry = {"source": name.as_posix(), "output": destination.relative_to(output_dir).as_posix(),
-                     "status": "error", "code": exc.code, "duration_seconds": round(time.monotonic() - started, 3)}
-            usage = getattr(client, "last_usage", None)
-            if usage:
-                entry["usage"] = usage
-            results.append(entry)
-            continue
-        except (OSError, ValueError):
-            print(f"{name}: output_write: błąd danych lub zapisu wyniku", file=sys.stderr)
-            failures += 1
-            results.append({"source": name.as_posix(), "output": destination.relative_to(output_dir).as_posix(),
-                            "status": "error", "code": "output_write", "duration_seconds": round(time.monotonic() - started, 3)})
-            continue
-        counts[kind] += 1
-        if report_path:
-            entry = {"source": name.as_posix(), "output": destination.relative_to(output_dir).as_posix(),
-                     "status": "unknown" if kind == "unknown" else "ok", "type": kind, "sha256": digest,
+            entry = {"source": name.as_posix(), "output": output, "status": "error", "code": exc.code,
                      "duration_seconds": round(time.monotonic() - started, 3)}
             usage = getattr(client, "last_usage", None)
             if usage:
                 entry["usage"] = usage
-            results.append(entry)
-        print(f"{name}: {kind} ({classification.reason})")
+            return None, entry, f"{name}: {exc.code}: {exc}"
+        except (OSError, ValueError):
+            return None, {"source": name.as_posix(), "output": output, "status": "error", "code": "output_write",
+                          "duration_seconds": round(time.monotonic() - started, 3)},                 f"{name}: output_write: błąd danych lub zapisu wyniku"
+        entry = {"source": name.as_posix(), "output": output, "status": "unknown" if kind == "unknown" else "ok",
+                 "type": kind, "sha256": digest, "duration_seconds": round(time.monotonic() - started, 3)}
+        usage = getattr(client, "last_usage", None)
+        if usage:
+            entry["usage"] = usage
+        return kind, entry, f"{name}: {kind} ({classification.reason})"
+
+    counts: Counter[str] = Counter()
+    failures = 0
+    results = [None] * len(jobs)
+    # z modelem PDF-y idą równolegle (LLM_CONCURRENCY), bez modelu po kolei
+    workers = getattr(getattr(client, "rate_limit", None), "concurrency", 1) if client is not None else 1
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {pool.submit(process_one, source, destination): index for index, (source, destination) in enumerate(jobs)}
+        for future in as_completed(futures):
+            kind, entry, line = future.result()
+            results[futures[future]] = entry
+            if kind is None:
+                failures += 1
+                print(line, file=sys.stderr)
+            else:
+                counts[kind] += 1
+                print(line)
 
     classes = ", ".join(f"{kind}={count}" for kind, count in sorted(counts.items())) or "brak wyników"
     print(f"PDF={len(jobs)}, zapisano={sum(counts.values())}, błędy={failures}; {classes}")
