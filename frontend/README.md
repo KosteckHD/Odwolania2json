@@ -8,6 +8,15 @@ Panel WWW do przetwarzania jednej sprawy odwoławczej KIO. Użytkownik wgrywa PD
 - **Ekran 2:** górny pasek z jedynym przyciskiem „Pobierz ▾” (klik = ZIP sprawy, rozwinięcie = JSON bieżącego dokumentu); drugi pasek z „Dokumenty ▾” (lista ze statusami, „Ponów błędne”, „Przetwórz ponownie”, podsumowanie, dodawanie plików), „‹ nazwa · 1 z 5 ›”, „16/22 pól” i „⋯ Opcje dokumentu” (ponów ten plik, ukryj/pokaż PDF); pod spodem formularz | PDF z przeciąganym podziałem.
 - Menu ☰ (nowa sprawa, instrukcja, typy dokumentów z kreatorem, API/dane przykładowe) bez zmian. Szczegóły wyglądu: [DESIGN.md](DESIGN.md).
 
+## Funkcje sprawdzania danych
+
+- **Wyniki plik po pliku.** Każdy PDF idzie osobnym `POST /api/extract`, najwyżej 2 naraz (`EXTRACT_CONCURRENCY` w `api.js`). Wynik pojawia się od razu; plik ma stan „W kolejce”, „Przetwarzanie…” albo wynik, a przy „Dokumenty” widać „2 z 5 gotowe”. Błąd jednego pliku nie zatrzymuje reszty, „Anuluj” przerywa kolejkę i zostawia gotowe wyniki. ZIP jest dostępny po zakończeniu.
+- **Pozycje list.** Przy grupach-listach (odwołujący, zamawiający, mocodawcy, pełnomocnicy, listy ze schematu) jest „+ Dodaj …” pod ostatnią pozycją i „Usuń” przy tytule pozycji. Tak rozdziela się np. dwóch pełnomocników złączonych przez model w jedną pozycję. Osoby podpisujące wpisuje się po jednej w wierszu.
+- **Ręczna zmiana typu.** Przy nierozpoznanym dokumencie wybiera się typ z listy i dostaje pusty formularz; przy rozpoznanym: „⋯ Opcje dokumentu” → „Zmień typ dokumentu…” (z ostrzeżeniem) albo „Przywróć rozpoznanie modelu”. Eksport ma wtedy format wybranego typu zamiast `{}`.
+- **Sumy kontrolne.** NIP, REGON (9 i 14 cyfr), PESEL i numer rachunku (IBAN PL, mod 97) są sprawdzane dla wartości od modelu i wpisanych ręcznie. Niezgodność daje ostrzeżenie pod rubryką, wartość zostaje zapisana. KRS nie ma sumy kontrolnej.
+- **Źródło pola.** Dopisek „str. N · metoda” (pole `evidence` z API) otwiera podgląd na stronie N i podświetla wiersz z wartością. Atrapa ma przykładowe `evidence`.
+- **Typy z kreatora.** Typ spoza `fields.js` dostaje formularz zbudowany z JSON Schema z `GET /api/document-types` (pole `schema`): daty w kratkach, tak/nie, liczby, cyfry, listy, grupy. Stary backend bez `schema`: formularz z kluczy JSON.
+
 To statyczny HTML/CSS/JS: bez budowania i bez zależności. Kontrakt z backendem opisuje [docs/INTERFACES.md](../docs/INTERFACES.md#api-dla-frontendu).
 
 ## Uruchomienie
@@ -43,9 +52,13 @@ node --test frontend/tests/
 | `tests/parse.test.mjs` | wyłuskiwanie wartości z zaznaczonego tekstu: identyfikatory, daty, kwoty, kod powodu, tekst bez etykiety |
 | `tests/api.test.mjs` | `buildForm`, `parseDocuments`, `extractWithApi` (200, 400, 5xx, błąd sieci, przerwanie, z podstawionym `fetchImpl`), `pickMockEntry`, `extractWithMock` |
 | `tests/zip.test.mjs` | `crc32` (wektor `123456789`), struktura ZIP z `zipStore`: sygnatury, nazwy, treść, CRC |
-| `tests/fixture.test.mjs` | spójność atrapy z `fields.js`: wszystkie trzy statusy, każde pole wpisu `ok` ma rubrykę i odwrotnie |
+| `tests/fixture.test.mjs` | spójność atrapy z `fields.js`: wszystkie trzy statusy, każde pole wpisu `ok` ma rubrykę i odwrotnie, poprawne `evidence` |
 | `tests/wizard.test.mjs` | kreator typu dokumentu: identyfikator, wzorce, schemat, YAML, walidacja |
 | `tests/layout.test.mjs` | czyste funkcje układu: podpis „Dokumenty 5 · 1 błąd”, „16/22 pól · 1 poprawka”, statusy z tekstem i ikoną, położenie przycisku „Wstaw do” i strzałki od zaznaczenia |
+| `tests/queue.test.mjs` | kolejka „plik po pliku” (`extractEach`): limit równoległości, kolejność wyników, błąd jednego pliku, anulowanie |
+| `tests/fields.test.mjs` | pusta pozycja listy (`emptyListItem`), formularz ze schematu (`schemaToSpec`, także na schemacie z kreatora) |
+| `tests/export.test.mjs` | pliki wynikowe JSON/ZIP, ręczna zmiana typu w obu kierunkach, ślad w kopii roboczej |
+| `tests/checksum.test.mjs` | sumy kontrolne NIP, REGON, PESEL, rachunku NRB |
 | `tests/draft.test.mjs` | kopia robocza poprawek: klucz sprawy, liczenie zmian, magazyn (limit, termin ważności, uszkodzone dane), dopasowanie plików w innej kolejności i z duplikatami, niepobrane poprawki, opis po polsku |
 
 `tests/index.js` pozwala podać sam katalog: od Node 21 argumenty `--test` są wzorcami glob, a katalog jest ładowany jak moduł. Pojedynczy plik uruchomisz tak: `node --test frontend/tests/parse.test.mjs`.
@@ -56,9 +69,10 @@ node --test frontend/tests/
 | --- | --- |
 | `index.html`, `styles.css` | układ i wygląd panelu (zasady w [DESIGN.md](DESIGN.md)) |
 | `app.js` | stan, ekrany 1 i 2, panele „Dokumenty”, „Pobierz” i „Opcje”, rubryki, edycja, wstawianie z PDF-u, pobieranie |
-| `api.js` | klient `POST /api/extract`, opcjonalne `GET /api/document-types`, atrapa |
-| `fields.js` | opis rubryk dla typów `odwolanie`, `pelnomocnictwo`, `przelew` (`DOC_TYPES`). Inne typy wyświetlają się z kluczy JSON |
-| `parse.js` | czyste funkcje zamieniające tekst na wartość rubryki |
+| `api.js` | klient `POST /api/extract`, kolejka „plik po pliku” (`extractEach`), opcjonalne `GET /api/document-types`, atrapa |
+| `fields.js` | opis rubryk dla typów `odwolanie`, `pelnomocnictwo`, `przelew` (`DOC_TYPES`), pusta pozycja listy i formularz ze schematu (`schemaToSpec`) dla innych typów |
+| `parse.js` | czyste funkcje zamieniające tekst na wartość rubryki, sumy kontrolne |
+| `export.js` | pliki wynikowe JSON/ZIP i ręczna zmiana typu dokumentu |
 | `pdfview.js` | podgląd PDF-u z warstwą tekstu (PDF.js z `vendor/pdfjs`) |
 | `zip.js` | ZIP bez kompresji do pobrania całej sprawy |
 | `layout.js` | czyste funkcje układu (podpisy pasków, statusy, położenie „Wstaw do” i strzałki) |
