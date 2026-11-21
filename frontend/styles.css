@@ -608,6 +608,11 @@ select.wiz-in { cursor: pointer; padding-right: 4px; }
 .wiz-file-head .btn { margin-left: auto; min-height: 32px; padding: 0 10px; font-size: 13px; }
 .wiz-pre { max-height: 300px; overflow: auto; padding: 10px 12px; font-size: 13px; white-space: pre; overflow-wrap: normal; }
 .wiz-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.wiz-save { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
+.wiz-save-status { font-size: 14px; padding-left: 10px; border-left: 2px solid var(--rule); }
+.wiz-save-status[data-kind="ok"] { color: var(--ok); border-left-color: var(--ok); }
+.wiz-save-status[data-kind="error"] { color: var(--bad); border-left-color: var(--bad); }
+.wiz-launch .wiz-save-status { margin-top: 8px; }
 .wiz-where { display: grid; gap: 4px; padding-left: 20px; list-style: decimal; font-size: 14px; color: var(--ink-soft); max-width: 70ch; }
 
 @media (max-width: 720px) {

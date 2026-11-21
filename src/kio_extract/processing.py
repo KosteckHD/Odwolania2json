@@ -29,6 +29,8 @@ def normalize_result(value, schema):
 class DocumentProcessor:
     def __init__(self, configs, prompt_path: Path, client=None, ocr: OCR | None = None):
         self.configs = configs
+        self.prompt_path = prompt_path
+        self.client = client
         self.ocr = ocr if ocr is not None else tesseract_ocr
         self.prompted = PromptExtractor(client, tuple(configs.values()), prompt_path) if client else None
         self.extractors = {} if client else {key: resolve_extractor(config) for key, config in configs.items()}
@@ -36,6 +38,10 @@ class DocumentProcessor:
             key: Draft202012Validator(config.schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
             for key, config in configs.items()
         }
+
+    def with_configs(self, configs):
+        """Nowy procesor z tym samym modelem i OCR, ale innym zestawem typów dokumentów."""
+        return DocumentProcessor(configs, self.prompt_path, self.client, self.ocr)
 
     def process(self, path: Path):
         classification, data, _ = self.process_with_evidence(path)

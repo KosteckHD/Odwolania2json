@@ -74,6 +74,33 @@ export async function fetchDocumentTypes({ fetchImpl = fetch } = {}) {
   return body.types;
 }
 
+/**
+ * Zapisuje typ z kreatora w backendzie (POST /api/document-types).
+ * Backend sprawdza pliki tymi samymi regułami co przy starcie i od razu zaczyna używać nowego typu.
+ * Zwraca { doc_type, label, files }; przy odrzuceniu rzuca ApiError z komunikatem backendu.
+ */
+export async function saveDocumentType({ yaml, schema }, { fetchImpl = fetch } = {}) {
+  let response;
+  try {
+    response = await fetchImpl(TYPES_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ yaml, schema }),
+    });
+  } catch {
+    throw new ApiError("network", "Brak połączenia z serwerem. Sprawdź, czy backend działa.");
+  }
+  let body = null;
+  try { body = await response.json(); } catch { body = null; }
+  if (!response.ok) {
+    const fallback = response.status === 404 || response.status === 405
+      ? "Ten serwer nie obsługuje zapisu typów. Pobierz pliki i dodaj je ręcznie."
+      : `Nie udało się zapisać typu (HTTP ${response.status}).`;
+    throw new ApiError("server", body?.error?.message ?? fallback, response.status);
+  }
+  return body;
+}
+
 /** Dobiera wpis z próbki po nazwie pliku; nieznane nazwy dostają kolejne wpisy. */
 export function pickMockEntry(fileName, index, documents) {
   const name = fileName.toLowerCase();

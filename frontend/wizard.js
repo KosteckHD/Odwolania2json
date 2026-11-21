@@ -2,9 +2,11 @@
 // Z formularza powstają dwa pliki w formacie backendu (docs/ADD_DOCUMENT_TYPE.md):
 //   configs/documents/<typ>.yaml   – rozpoznawanie i wskazówki dla modelu
 //   schemas/<typ>.schema.json      – pola danych w JSON-ie
-// Wszystko dzieje się w przeglądarce: panel niczego nie wysyła, tylko daje pliki do pobrania.
+// Z prawdziwym API „Dodaj do systemu” zapisuje oba pliki w backendzie (POST /api/document-types),
+// który sprawdza je regułami ze startu i od razu używa nowego typu. Pliki można też pobrać i dodać ręcznie.
 
 import { zipStore } from "./zip.js";
+import { saveDocumentType } from "./api.js";
 
 /* ---------- generowanie plików (bez DOM, do testów w Node) ---------- */
 
@@ -320,9 +322,18 @@ function mountWizard(root) {
   const yamlPre = h("pre", { class: "json wiz-pre", tabindex: "0", "aria-label": "Podgląd pliku konfiguracji YAML" });
   const schemaPre = h("pre", { class: "json wiz-pre", tabindex: "0", "aria-label": "Podgląd schematu JSON" });
 
+  // Zapis w backendzie: tylko z prawdziwym API (w trybie danych przykładowych nie ma dokąd zapisać).
+  const saveBtn = h("button", { class: "btn", type: "button", onclick: () => save() }, "Dodaj do systemu");
+  const saveNote = h("p", { class: "wiz-hint", text: "Serwer sprawdzi oba pliki i od razu zacznie rozpoznawać nowy typ, bez ponownego uruchamiania. Poniżej podgląd plików, które zapisze." });
+  const saveStatus = h("p", { class: "wiz-save-status", role: "status", "aria-live": "polite", hidden: true });
+  const saveBox = h("div", { class: "wiz-save" }, h("div", { class: "wiz-actions" }, saveBtn), saveNote, saveStatus);
+  const mockMode = () => document.getElementById("mode-select")?.value === "mock";
+
   const openBtn = h("button", { class: "btn", type: "button", onclick: () => toggle(true) }, "+ Dodaj typ dokumentu");
+  const launchStatus = h("p", { class: "wiz-save-status", role: "status", "data-kind": "ok", hidden: true });
   const launch = h("div", { class: "wiz-launch" }, openBtn,
-    h("p", { text: "Formularz przygotuje oba pliki konfiguracyjne. Nie trzeba ręcznie pisać YAML ani JSON." }));
+    h("p", { text: "Formularz przygotuje oba pliki konfiguracyjne i zapisze je na serwerze. Nie trzeba ręcznie pisać YAML ani JSON." }),
+    launchStatus);
 
   const form = h("form", { class: "wiz", hidden: true, novalidate: true, "aria-labelledby": "wiz-title", onsubmit: (e) => e.preventDefault() },
     h("div", { class: "wiz-head" },
@@ -353,8 +364,9 @@ function mountWizard(root) {
       step(4, "Wskazówki dla modelu",
         "Jak rozpoznać dokument i jak wypełniać pola. Gdy zostawisz puste, kreator wpisze wskazówki ogólne (widać je w podglądzie).",
         fieldBox("Wskazówki (opcjonalnie)", hintsIn)),
-      step(5, "Pliki do pobrania", null,
+      step(5, "Zapis typu", null,
         todo, warn,
+        saveBox,
         h("div", { class: "wiz-file" },
           h("div", { class: "wiz-file-head" }, yamlName,
             h("button", { class: "btn btn-line", type: "button", onclick: () => download("yaml") }, "Pobierz YAML")),
@@ -364,8 +376,8 @@ function mountWizard(root) {
             h("button", { class: "btn btn-line", type: "button", onclick: () => download("schema") }, "Pobierz schemat")),
           schemaPre),
         h("div", { class: "wiz-actions" },
-          h("button", { class: "btn", type: "button", onclick: () => download("zip") }, "Pobierz oba pliki (ZIP)")),
-        h("h4", { text: "Gdzie wrzucić pliki" }),
+          h("button", { class: "btn btn-line", type: "button", onclick: () => download("zip") }, "Pobierz oba pliki (ZIP)")),
+        h("h4", { text: "Ręcznie, bez panelu" }),
         h("ol", { class: "wiz-where" },
           h("li", {}, "Rozpakuj ZIP w głównym katalogu projektu. Pliki trafią do ", h("code", { text: "configs/documents/" }), " i ", h("code", { text: "schemas/" }), ". Możesz też skopiować oba pliki ręcznie."),
           h("li", { text: "Uruchom ponownie backend. Przy starcie sprawdza wszystkie konfiguracje i w razie błędu zatrzymuje się z opisem problemu." }),
@@ -457,10 +469,16 @@ function mountWizard(root) {
 
     todo.className = errors.length ? "wiz-todo" : "wiz-ready";
     todo.replaceChildren(errors.length
-      ? h("div", {}, h("strong", { text: `Do uzupełnienia przed pobraniem (${errors.length}):` }), h("ul", {}, errors.map((e) => h("li", { text: e.msg }))))
-      : h("span", { text: "Wszystko gotowe. Pliki są zgodne z formatem backendu." }));
+      ? h("div", {}, h("strong", { text: `Do uzupełnienia przed zapisem (${errors.length}):` }), h("ul", {}, errors.map((e) => h("li", { text: e.msg }))))
+      : h("span", { text: mockMode()
+        ? "Wszystko gotowe. Pliki są zgodne z formatem backendu. W trybie danych przykładowych można je tylko pobrać."
+        : "Wszystko gotowe. Pliki są zgodne z formatem backendu." }));
     warn.replaceChildren(...warnings.map((w) => h("p", { text: w.msg })));
     warn.hidden = !warnings.length;
+
+    // w trybie danych przykładowych nie ma serwera, więc zostaje tylko pobranie plików
+    saveBox.hidden = mockMode();
+    if (!errors.length && saveStatus.dataset.kind === "error") setSaveStatus("", "");
 
     const id = spec.id || "nowy_typ";
     yamlName.textContent = `configs/documents/${id}.yaml`;
@@ -471,14 +489,48 @@ function mountWizard(root) {
     return { spec, errors };
   }
 
-  function download(what) {
+  /** Pokazuje wszystkie błędy i zwraca gotową specyfikację albo null (wtedy fokus na pierwszym błędzie). */
+  function readySpec() {
     showAll = true;
     const { spec, errors } = update();
-    if (errors.length) {
-      const first = errors.map((e) => (e.target === "fields" ? form.querySelector(".wiz-add") : targetEl(e.target))).find(Boolean);
-      first?.focus();
-      return;
+    if (!errors.length) return spec;
+    const first = errors.map((e) => (e.target === "fields" ? form.querySelector(".wiz-add") : targetEl(e.target))).find(Boolean);
+    first?.focus();
+    return null;
+  }
+
+  function setSaveStatus(kind, text) {
+    saveStatus.hidden = !text;
+    saveStatus.dataset.kind = kind;
+    saveStatus.textContent = text;
+  }
+
+  async function save() {
+    const spec = readySpec();
+    if (!spec) return;
+    const [yaml, schema] = filesOf(spec);
+    saveBtn.disabled = true;
+    setSaveStatus("info", "Zapisywanie…");
+    try {
+      const saved = await saveDocumentType({ yaml: yaml.text, schema: schema.text });
+      const label = saved?.label || oneLine(spec.label) || spec.id;
+      const files = (saved?.files ?? [yaml.name, schema.name]).join(" i ");
+      setSaveStatus("", "");
+      load({});
+      toggle(false);
+      launchStatus.hidden = false;
+      launchStatus.textContent = `Dodano typ „${label}”. Pliki ${files} są zapisane na serwerze, a panel rozpozna ten typ przy następnym przetwarzaniu.`;
+      document.dispatchEvent(new CustomEvent("types-changed"));
+    } catch (error) {
+      setSaveStatus("error", `Nie zapisano: ${error?.message ?? "nieznany błąd"}`);
+    } finally {
+      saveBtn.disabled = false;
     }
+  }
+
+  function download(what) {
+    const spec = readySpec();
+    if (!spec) return;
     const [yaml, schema] = filesOf(spec);
     const base = (f) => f.name.split("/").pop();
     if (what === "yaml") downloadBlob(base(yaml), new Blob([yaml.text], { type: "application/yaml" }));
@@ -509,7 +561,7 @@ function mountWizard(root) {
     form.hidden = !open;
     launch.hidden = open;
     if (manualSteps) manualSteps.hidden = open;
-    if (open) { update(); labelIn.focus(); } else openBtn.focus();
+    if (open) { launchStatus.hidden = true; update(); labelIn.focus(); } else openBtn.focus();
   }
 
   labelIn.addEventListener("input", () => { if (idIn.dataset.auto) idIn.value = slugify(labelIn.value); });
