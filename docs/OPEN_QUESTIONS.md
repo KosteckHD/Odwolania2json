@@ -14,12 +14,12 @@ Audyt z 21.11.2026 przypięty do commita UZP `de135d20811caf630f3e94dc655ba5eebd
 
 | ID | Pytanie | Decyzja do czasu odpowiedzi | Właściciel |
 | --- | --- | --- | --- |
-| U01 | Czy pusty wynik ma 0 bajtów, czy zawiera `{}`? | Domyślnie 0 bajtów (`empty_file`). `--negative-output empty_object` zapisuje `{}`. | A |
-| U02 | Jak scorer liczy F1 dla `null`, pustych napisów, braków, list i duplikatów? | Lokalny micro-F1 według [planu integracji](INTEGRATION_PLAN.md). Uznaj go za metrykę zespołu. | A |
-| U03 | Który opis obowiązuje dla ID 6 oraz czy w ID 12 interpunkcja jest oceniana? | B bierze dokładne etykiety z opublikowanego pliku słownika, bez końcowej kropki dla ID 12. Pięć złotych opisów dla ID 6 odbiega od słownika. | B |
-| U04 | Jak reprezentować brak pierwszego zarzutu, brak typu mocodawcy i nieustalone umocowanie? Czy `pelnomocnik` pozostaje obiektem z pustymi polami? | Roboczo `null` dla nieustalonego skalara, `[]` dla pustej listy, obiekt z pełnym zestawem kluczy. Jawne 0/1 na podstawie treści. Potwierdzić przed wydaniem. | A, B, C |
-| U05 | Czy PESEL to liczba, czy napis zachowujący 11 cyfr? | Wzorzec podaje liczbę. W treningu 97 wartości to `null`, a jedna to 11-cyfrowy napis. C trzyma cyfry jako tekst w ekstrakcji i stosuje roboczy kontrakt `integer | null` przy serializacji. | C |
-| U06 | Jaki system uruchomi jury oraz jak dostarczyć klucz i sprawdzić ruch do endpointu UE/EOG? | Podstawowy tryb regułowy działa offline. A potwierdza kanał przekazania i udokumentuje licencję modelu, dostawcę i lokalizację przed włączeniem API. | A |
-| U07 | Czy błędny PDF albo niedostępny OCR wymaga pliku wynikowego? | CLI zgłasza błąd, kontynuuje batch i zwraca kod 1. Przy ponowieniu wcześniejszy wynik pozostaje na dysku. Przy odbiorze uruchamiać na świeżym `output/`. | A |
+| U01 | Czy pusty wynik ma 0 bajtów, czy zawiera `{}`? | Domyślnie 0 bajtów (`empty_file`). `--negative-output empty_object` zapisuje `{}`. | Backend |
+| U02 | Jak scorer liczy F1 dla `null`, pustych napisów, braków, list i duplikatów? | Lokalny micro-F1 według [planu integracji](INTEGRATION_PLAN.md). Uznaj go za metrykę zespołu. | Backend |
+| U03 | Który opis obowiązuje dla ID 6 oraz czy w ID 12 interpunkcja jest oceniana? | Prompt dostaje dokładne etykiety z opublikowanego słownika, bez końcowej kropki dla ID 12. Pięć złotych opisów dla ID 6 odbiega od słownika. | Backend |
+| U04 | Jak reprezentować brak pierwszego zarzutu, brak typu mocodawcy i nieustalone umocowanie? Czy `pelnomocnik` pozostaje obiektem z pustymi polami? | Roboczo `null` dla nieustalonego skalara, `[]` dla pustej listy, obiekt z pełnym zestawem kluczy. Jawne 0/1 na podstawie treści. Potwierdzić przed wydaniem. | Backend |
+| U05 | Czy PESEL to liczba, czy napis zachowujący 11 cyfr? | Wzorzec podaje liczbę. W treningu 97 wartości to `null`, a jedna to 11-cyfrowy napis. Prompt wymaga rozpoznania 11 cyfr i stosuje roboczy kontrakt `integer` lub `null` przy serializacji. | Backend |
+| U06 | Jaki system uruchomi jury oraz jak dostarczyć klucz i sprawdzić ruch do endpointu UE/EOG? | Backend potwierdza kanał przekazania i dokumentuje licencję modelu, dostawcę i lokalizację przed użyciem API na danych. | Backend |
+| U07 | Czy błędny PDF albo niedostępny OCR wymaga pliku wynikowego? | CLI zgłasza błąd, kontynuuje batch i zwraca kod 1. Przy ponowieniu wcześniejszy wynik pozostaje na dysku. Przy odbiorze uruchamiać na świeżym `output/`. | Backend |
 
-Dobór `pypdf`, JSON Schema, YAML, OCR, strategii ekstrakcji i struktury modułów to decyzje zespołu. BZP i TED mają odrębne pola. Komentarz wzorca BZP używa przykładu ze spacją oraz polecenia usunięcia spacji. B potwierdza porównanie formatu na danych przed finalizacją normalizacji.
+Dobór `pypdf`, JSON Schema, YAML, OCR, strategii ekstrakcji i struktury modułów to decyzje zespołu. BZP i TED mają odrębne pola. Komentarz wzorca BZP używa przykładu ze spacją oraz polecenia usunięcia spacji. Backend porównuje format z danymi przed finalizacją normalizacji.

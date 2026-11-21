@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from kio_extract.cli import main
 from kio_extract.pdf_reader import extract_pdf
+from kio_extract.providers import chat
 
 
 def create_pdf(path: Path, lines: tuple[str, ...] = ()) -> None:
@@ -75,3 +77,58 @@ def test_unreadable_files_continue_batch_and_ocr_is_injectable(tmp_path, capsys)
     errors = capsys.readouterr().err
     assert "ocr_required" in errors and "pdf_read" in errors
     assert list((output_dir / "case1").iterdir()) == [output_dir / "case1" / "c_negative.json"]
+
+
+def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatch, capsys):
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    create_pdf(input_dir / "case1" / "a_odwolanie.pdf", ("Dokument testowy potwierdza wplate na rachunek.",))
+    create_pdf(input_dir / "case1" / "b_przelew.pdf", ("Dokument nie dotyczy zadnego wniosku.",))
+    create_pdf(input_dir / "case1" / "c_wadliwy.pdf", ("To jest transakcja o niepoprawnej odpowiedzi.",))
+
+    payment = {"przelew_bankowy": {
+        "data_operacji": "2026-02-03", "kwota": 50.0, "na_rachunek": "000123",
+        "numer_transakcji": None, "tytul": None, "z_rachunku": None,
+    }}
+    answers = iter([
+        {"typ": "przelew", "dane": payment},
+        {"typ": "unknown", "dane": None},
+        {"typ": "przelew", "dane": {"przelew_bankowy": {"kwota": "brak danych"}}},
+    ])
+    requests = []
+
+    class FakeConnection:
+        def __init__(self, host, port, timeout):
+            assert (host, port, timeout) == ("localhost", 8765, 60)
+
+        def request(self, method, path, *, body, headers):
+            assert (method, path) == ("POST", "/v1/chat/completions")
+            requests.append(json.loads(body))
+
+        def getresponse(self):
+            result = {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(next(answers))}}]}
+            return SimpleNamespace(status=200, read=lambda: json.dumps(result).encode("utf-8"))
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(chat, "HTTPConnection", FakeConnection)
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:8765/v1")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+    assert main(["--llm", "--input", str(input_dir), "--output", str(output_dir)]) == 1
+    assert len(requests) == 3
+    assert requests[0]["response_format"] == {"type": "json_object"}
+    system, user = requests[0]["messages"]
+    assert system["role"] == "system"
+    assert "czynnosc_powod_opisy" in system["content"]
+    assert "przelew_bankowy" in system["content"]
+    assert "Dokument testowy" not in system["content"]
+    assert user["role"] == "user"
+    assert "potwierdza wplate" in json.loads(user["content"])["strony"][0]["tekst"]
+    assert "a_odwolanie.pdf" not in user["content"]
+    assert json.loads((output_dir / "case1" / "a_odwolanie.json").read_bytes()) == payment
+    assert (output_dir / "case1" / "b_przelew.json").read_bytes() == b""
+    assert not (output_dir / "case1" / "c_wadliwy.json").exists()
+    assert "invalid_output" in capsys.readouterr().err

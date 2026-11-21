@@ -6,11 +6,13 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from .classifier import classify
-from .contracts import ConfigurationError, DocumentError, JsonObject
+from .contracts import ConfigurationError, DocumentError
 from .extraction_engine import resolve_extractor
 from .filesystem import output_paths
 from .output import write_result
 from .pdf_reader import extract_pdf
+from .prompt_extraction import PromptExtractor
+from .providers.chat import ChatClient
 from .schema_registry import load_configs
 
 
@@ -23,6 +25,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=ROOT / "output")
     parser.add_argument("--configs", type=Path, default=ROOT / "configs" / "documents")
     parser.add_argument("--schemas", type=Path, default=ROOT / "schemas")
+    parser.add_argument("--llm", action="store_true", help="Wyślij tekst PDF do skonfigurowanego API LLM")
+    parser.add_argument("--prompt", type=Path, default=ROOT / "prompts" / "system_pl.md", help="Plik prompta trybu LLM")
     parser.add_argument("--negative-output", choices=("empty_file", "empty_object"), default="empty_file")
     args = parser.parse_args(argv)
 
@@ -30,7 +34,12 @@ def main(argv: list[str] | None = None) -> int:
         input_dir = args.input.resolve()
         output_dir = args.output.resolve()
         configs = load_configs(args.configs, args.schemas)
-        extractors = {key: resolve_extractor(config) for key, config in configs.items()}
+        all_configs = tuple(configs.values())
+        prompted = None
+        if args.llm:
+            prompted = PromptExtractor(ChatClient.from_environment(), all_configs, args.prompt)
+        else:
+            extractors = {key: resolve_extractor(config) for key, config in configs.items()}
         validators = {
             key: Draft202012Validator(config.schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
             for key, config in configs.items()
@@ -41,7 +50,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Błąd: {exc}", file=sys.stderr)
         return 2
 
-    all_configs = tuple(configs.values())
     counts: Counter[str] = Counter()
     failures = 0
     for source, destination in jobs:
@@ -51,11 +59,14 @@ def main(argv: list[str] | None = None) -> int:
             if document.pages_needing_ocr:
                 pages = ", ".join(map(str, document.pages_needing_ocr))
                 raise DocumentError("ocr_required", f"Strony wymagające OCR: {pages}")
-            classification = classify(document, all_configs)
+            if prompted is None:
+                classification = classify(document, all_configs)
+                config = configs.get(classification.doc_type)
+                data = extractors[config.doc_type](document, config).data if config else None
+            else:
+                classification, data = prompted.extract(document)
             kind = classification.doc_type
-            data: JsonObject | None = None
             if kind != "unknown":
-                data = extractors[kind](document, configs[kind]).data
                 error = next(validators[kind].iter_errors(data), None)
                 if error is not None:
                     raise DocumentError("invalid_output", f"Naruszono schemat ({error.validator})")

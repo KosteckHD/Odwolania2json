@@ -1,0 +1,35 @@
+{
+  "documents": [
+    {
+      "filename": "potwierdzenie.pdf",
+      "status": "ok",
+      "type": "przelew",
+      "data": {
+        "przelew_bankowy": {
+          "data_operacji": "2026-11-21",
+          "kwota": 150.5,
+          "na_rachunek": null,
+          "numer_transakcji": null,
+          "tytul": "Wpis od odwołania",
+          "z_rachunku": null
+        }
+      }
+    },
+    {
+      "filename": "ogloszenie.pdf",
+      "status": "unknown",
+      "type": "unknown",
+      "data": null
+    },
+    {
+      "filename": "skan.pdf",
+      "status": "error",
+      "type": null,
+      "data": null,
+      "error": {
+        "code": "ocr_required",
+        "message": "Dokument wymaga odczytu OCR."
+      }
+    }
+  ]
+}
