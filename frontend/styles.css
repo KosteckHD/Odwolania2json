@@ -1,4 +1,4 @@
-/* Odwołania2JSON · „Druk urzędowy”, wersja kompaktowa.
+/* KIOdczyt · „Druk urzędowy”, wersja kompaktowa.
    Rubryki i kratki w kolorze druku, dane wpisane czernią.
    Na komputerze aplikacja mieści się w oknie: przewijają się tylko kolumny. */
 
@@ -88,8 +88,9 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 /* ---------- menu ---------- */
 .rail { display: flex; flex-direction: column; min-height: 0; background: var(--brand); color: #fff; overflow: hidden auto; }
 .rail-head { display: flex; align-items: center; gap: 10px; min-height: var(--top-h); padding: 10px 8px 10px 14px; border-bottom: 1px solid rgba(255,255,255,.18); }
-.rail-mark { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid rgba(255,255,255,.8); font-weight: 600; font-size: 12px; letter-spacing: .04em; }
-.rail-name { font-weight: 600; font-size: 15px; white-space: nowrap; }
+/* znak KIOdczyt: kartka sprawy z wagą (symbol #i-logo w index.html) */
+.rail-mark { flex: none; width: 27px; height: 32px; color: #fff; }
+.rail-name { font-weight: 700; font-size: 17px; letter-spacing: -.01em; white-space: nowrap; }
 .rail-toggle, .rail-item, .menu-btn { display: flex; align-items: center; gap: 12px; border: 0; background: none; cursor: pointer; }
 .rail-toggle { margin-left: auto; width: 34px; height: 34px; justify-content: center; color: rgba(255,255,255,.85); }
 .rail-toggle:hover { background: var(--brand-hover); color: #fff; }
@@ -550,8 +551,9 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
   color: var(--brand); border: 1px solid var(--form-soft); background: var(--sheet);
 }
 .menu-btn:hover { background: var(--paper); border-color: var(--brand); }
-.brand-mini { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: var(--brand); white-space: nowrap; }
-.brand-mini-mark { display: grid; place-items: center; width: 26px; height: 26px; background: var(--brand); color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .03em; }
+.brand-mini { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; font-size: 18px; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; }
+.brand-mini-mark { flex: none; width: 26px; height: 31px; color: var(--brand); }
+.brand-kio { color: var(--brand); }
 .topbar-sep { width: 1px; height: 24px; background: var(--rule); }
 @media (max-width: 640px) { .brand-mini-text, .topbar-sep { display: none; } }
 
