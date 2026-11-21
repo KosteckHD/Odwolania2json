@@ -56,7 +56,7 @@ def test_batch_writes_schema_output_and_preserves_names(tmp_path):
     assert negative.read_bytes() == b""
 
 
-def test_unreadable_files_continue_batch_and_ocr_is_injectable(tmp_path, capsys):
+def test_unreadable_files_continue_batch_and_ocr_is_injectable(tmp_path, capsys, monkeypatch):
     input_dir = tmp_path / "input"
     output_dir = tmp_path / "output"
     source = input_dir / "case1" / "a_scan.pdf"
@@ -75,10 +75,17 @@ def test_unreadable_files_continue_batch_and_ocr_is_injectable(tmp_path, capsys)
     assert calls == [(source, 1)]
     assert recovered.used_ocr and recovered.pages_needing_ocr == ()
 
-    assert main(["--input", str(input_dir), "--output", str(output_dir)]) == 1
+    monkeypatch.setenv("SCAN_OCR", "none")   # wynik nie zależy od zainstalowanego Tesseracta
+    assert main(["--input", str(input_dir), "--output", str(output_dir), "--on-error", "skip"]) == 1
     errors = capsys.readouterr().err
     assert "ocr_required" in errors and "pdf_read" in errors
     assert list((output_dir / "case1").iterdir()) == [output_dir / "case1" / "c_negative.json"]
+
+    # domyślnie plik wyniku powstaje dla każdego PDF-u: błąd odczytu daje {} jak negatyw
+    assert main(["--input", str(input_dir), "--output", str(output_dir)]) == 1
+    assert sorted(path.name for path in (output_dir / "case1").iterdir()) == [
+        "a_scan.json", "b_corrupt.json", "c_negative.json"]
+    assert json.loads((output_dir / "case1" / "b_corrupt.json").read_bytes()) == {}
 
 
 def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatch, capsys):
@@ -120,8 +127,8 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("LLM_EXTRA_BODY", '{"reasoning_effort": "none"}')
 
-    # bez --llm: model włącza się sam, bo środowisko go konfiguruje
-    assert main(["--input", str(input_dir), "--output", str(output_dir)]) == 1
+    # bez --llm: model włącza się sam, bo środowisko go konfiguruje; wynik awaryjny to nie błąd przebiegu
+    assert main(["--input", str(input_dir), "--output", str(output_dir)]) == 0
     assert len(requests) == 3
     assert requests[0]["response_format"] == {"type": "json_object"}
     assert requests[0]["reasoning_effort"] == "none"
@@ -137,8 +144,9 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
     expected_payment = payment
     assert json.loads((output_dir / "case1" / "a_odwolanie.json").read_bytes()) == expected_payment
     assert json.loads((output_dir / "case1" / "b_przelew.json").read_bytes()) == {}
-    assert not (output_dir / "case1" / "c_wadliwy.json").exists()
-    assert "invalid_output" in capsys.readouterr().err
+    # niepoprawna odpowiedź modelu: wynik awaryjny z reguł YAML (tu typ nierozpoznany, więc {})
+    assert json.loads((output_dir / "case1" / "c_wadliwy.json").read_bytes()) == {}
+    assert "fallback:invalid_output" in capsys.readouterr().err
 
 
 def test_llm_batch_recovers_from_429_and_saves_every_document(tmp_path, monkeypatch):
@@ -186,12 +194,18 @@ def test_run_report_marks_failures_and_tracks_saved_bytes(tmp_path):
     old_result = output_dir / "case" / "b.json"
     old_result.parent.mkdir(parents=True)
     old_result.write_text('{"old": true}', encoding="utf-8")
-    assert main(["--input", str(input_dir), "--output", str(output_dir), "--report", str(report)]) == 1
+    args = ["--input", str(input_dir), "--output", str(output_dir), "--report", str(report)]
+    assert main([*args, "--on-error", "skip"]) == 1
     first, second = json.loads(report.read_bytes())["documents"]
     assert first["status"] == "ok"
     assert first["sha256"] == hashlib.sha256((output_dir / first["output"]).read_bytes()).hexdigest()
-    assert second["status"] == "error" and second["code"] == "pdf_read"
+    assert second["status"] == "error" and second["code"] == "pdf_read" and "written" not in second
     assert old_result.read_text(encoding="utf-8") == '{"old": true}'
+
+    assert main(args) == 1
+    second = json.loads(report.read_bytes())["documents"][1]
+    assert second["status"] == "error" and second["written"] == "negative"
+    assert json.loads(old_result.read_bytes()) == {}
 
 
 def test_rules_flag_skips_configured_llm(tmp_path, monkeypatch):
