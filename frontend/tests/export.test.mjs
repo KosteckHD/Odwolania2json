@@ -87,3 +87,14 @@ test("niepobrane: sama zmiana typu wymaga pobrania, po pobraniu znika", () => {
   saved[1] = JSON.stringify(results[1].data);
   assert.deepEqual(unsavedPositions({ results, edits: [], saved }), []);
 });
+
+test("emptyDataFor dla typu ze schematu (kreator): pola z poziomu głównego bez grupy", async () => {
+  const { schemaToSpec } = await import("../fields.js");
+  const spec = schemaToSpec({ type: "object", properties: {
+    numer: { type: ["string", "null"] }, data_odbioru: { type: ["string", "null"], format: "date" },
+    podpisane: { type: ["boolean", "null"] }, osoby: { type: "array", items: { type: "object", properties: { imie: { type: "string" } } } },
+  } }, "Potwierdzenie odbioru");
+  assert.deepEqual(emptyDataFor(spec), { numer: null, data_odbioru: null, podpisane: null, osoby: [] });
+  const retyped = retypeEntry({ filename: "x.pdf", status: "unknown", type: null, data: null }, "potwierdzenie_odbioru", spec);
+  assert.deepEqual(retyped.data, { numer: null, data_odbioru: null, podpisane: null, osoby: [] });
+});

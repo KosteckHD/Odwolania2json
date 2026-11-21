@@ -11,7 +11,8 @@ export const safeName = (name) => name.replace(/[\\/:*?"<>|]+/g, "_").trim() || 
 export function emptyDataFor(spec) {
   const data = {};
   for (const group of spec?.groups ?? []) {
-    data[group.path] = group.list ? [] : emptyListItem(group.fields);
+    if (group.root) Object.assign(data, emptyListItem(group.fields));   // pola z poziomu głównego schematu
+    else data[group.path] = group.list ? [] : emptyListItem(group.fields);
   }
   return data;
 }

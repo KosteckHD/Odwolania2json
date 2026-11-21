@@ -1,5 +1,5 @@
 import { extractEach, extractWithApi, extractWithMock, fetchDocumentTypes } from "./api.js";
-import { DOC_TYPES, emptyListItem, getPath, typeLabel } from "./fields.js";
+import { DOC_TYPES, emptyListItem, getPath, schemaToSpec } from "./fields.js";
 import { zipStore } from "./zip.js";
 import { buildResultFiles, jsonName, retypeEntry, safeName } from "./export.js";
 import { createPdfViewer } from "./pdfview.js";
@@ -35,9 +35,16 @@ const state = {
   confirmRerun: false,   // „Przetwórz ponownie” czeka na drugie kliknięcie (są poprawki)
   confirmDocRetry: null, // „Przetwórz ten plik ponownie” czeka na drugie kliknięcie (pozycja)
   retypeOpen: null,      // pozycja dokumentu z otwartym wyborem nowego typu
+  schemaSpecs: {},       // typ spoza fields.js → opis formularza zbudowany ze schematu (GET /api/document-types)
+  typeLabels: {},        // typ → nazwa wyświetlana z backendu (label), gdy jest
 };
 
 const viewers = new WeakMap(); // File → podgląd PDF (renderowany raz)
+
+/** Opis rubryk typu: trzy wbudowane z fields.js (ręcznie dobrana kolejność i podpowiedzi), inne ze schematu. */
+const specFor = (type) => DOC_TYPES[type] ?? state.schemaSpecs[type] ?? null;
+/** Nazwa typu: z fields.js, z `label` backendu, a w ostateczności sam identyfikator. */
+const typeLabel = (type) => DOC_TYPES[type]?.label ?? state.typeLabels[type] ?? state.schemaSpecs[type]?.label ?? type;
 let draftWritten = false;      // w tej sesji zapisano kopię roboczą bieżącej sprawy
 
 function readPref(key, fallback) {
@@ -207,6 +214,7 @@ el.mode.addEventListener("change", () => {
   else url.searchParams.delete("mock");
   history.replaceState(null, "", url);
   if (state.view === "types") loadTypes();
+  loadSchemas({ force: true });
   render();
 });
 
@@ -395,6 +403,7 @@ async function runExtraction(positions) {
         Object.assign(state, { results: state.files.map(() => null), edits: [], saved: [], selected: pos });
       }
       state.results[pos] = entry;
+      if (entry.status === "ok" && !specFor(entry.type)) loadSchemas({ force: true });
       delete state.edits[pos];
       delete state.saved[pos];
       // arkusz przebudowujemy tylko dla dokumentu, który właśnie się otworzył albo jest wybrany
@@ -885,9 +894,9 @@ function renderSheet() {
 
 /* ---------- ręczna zmiana typu dokumentu ---------- */
 
-/** Typy, które da się ustawić ręcznie: znane panelowi (fields.js). */
+/** Typy, które da się ustawić ręcznie: znane panelowi (fields.js) i ze schematów backendu. */
 function manualTypes() {
-  return Object.entries(DOC_TYPES).map(([id, t]) => ({ id, label: t.label }));
+  return [...Object.entries(DOC_TYPES), ...Object.entries(state.schemaSpecs)].map(([id, t]) => ({ id, label: typeLabel(id) ?? t.label }));
 }
 
 /** Lista typów i przycisk. `current` = typ, którego nie proponujemy (bieżący). */
@@ -932,7 +941,7 @@ function retypePanel(index, entry) {
 }
 
 function setManualType(index, type) {
-  state.results[index] = retypeEntry(state.results[index], type);
+  state.results[index] = retypeEntry(state.results[index], type, specFor(type));
   delete state.edits[index];
   delete state.saved[index];
   Object.assign(state, { retypeOpen: null, sheetMode: "fields", active: null });
@@ -1018,11 +1027,11 @@ function dataAt(index) {
 }
 
 function completeness(entry, data = entry.data) {
-  const spec = DOC_TYPES[entry.type];
+  const spec = specFor(entry.type);
   if (!spec || !data) return null;
   let filled = 0, total = 0;
   for (const group of spec.groups) {
-    const value = data[group.path];
+    const value = group.root ? data : data[group.path];
     const items = group.list ? (Array.isArray(value) && value.length ? value : [{}]) : [value];
     for (const item of items) for (const f of group.fields) {
       total += 1;
@@ -1163,7 +1172,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 /* ---------- rubryki do wpisywania ---------- */
 
 function fieldsView(index, entry) {
-  const spec = DOC_TYPES[entry.type];
+  const spec = specFor(entry.type);
   const data = dataAt(index);
   const wrap = node("div", "fields-view");
   const ctx = { n: 0, evidence: evidenceMap(entry), index };
@@ -1173,7 +1182,10 @@ function fieldsView(index, entry) {
   }
   for (const group of spec.groups) {
     const value = data?.[group.path];
-    if (group.list) {
+    if (group.root) {
+      // proste pola z poziomu głównego schematu (typy z kreatora): ścieżka bez prefiksu grupy
+      wrap.append(groupBlock(group.title, group.fields.map((f) => fieldBlock(f, getPath(data, f.key), ctx, f.key))));
+    } else if (group.list) {
       wrap.append(...listGroup(group, value, ctx));
     } else {
       wrap.append(groupBlock(group.title, group.fields.map((f) =>
@@ -1364,7 +1376,9 @@ function controlFor(field, value, id, commit, path) {
     case "bool": return choiceControl([["1", "tak", 1], ["0", "nie", 0], ["", "brak informacji", null]], value === true ? 1 : value === false ? 0 : value ?? null, id, commit);
     case "enum": return choiceControl([...Object.entries(field.labels ?? {}).map(([v, t]) => [v, t, v]), ["", "brak informacji", null]], value ?? null, id, commit);
     case "names": return namesControl(value, id, commit);
+    case "lines": return linesControl(field, value, id, commit);
     case "amount": return amountControl(value, id, commit);
+    case "number": return amountControl(value, id, commit, { unit: "", integer: field.integer });
     default: return textControl(field, value, id, commit);
   }
 }
@@ -1416,7 +1430,7 @@ function cellsBox(input, cellsCount, gaps = []) {
 }
 
 function cellControl(field, value, id, commit, path) {
-  const lengths = field.kind === "code" ? [2] : expectedDigits(path);
+  const lengths = field.kind === "code" ? [2] : field.lengths ?? expectedDigits(path);
   const input = document.createElement("input");
   input.id = id;
   input.className = "cells-input";
@@ -1579,32 +1593,67 @@ function textControl(field, value, id, commit) {
   };
 }
 
-function amountControl(value, id, commit) {
+function amountControl(value, id, commit, { unit = "zł", integer = false } = {}) {
   const wrap = node("div", "amount-in");
   const input = document.createElement("input");
   input.id = id;
   input.className = "box-in";
   input.placeholder = " ";
-  input.inputMode = "decimal";
-  input.value = value == null ? "" : Number(value).toLocaleString("pl-PL", { minimumFractionDigits: 2 });
+  input.inputMode = integer ? "numeric" : "decimal";
+  // kwota z groszami („10 000,00”), zwykła liczba bez wymuszonych miejsc po przecinku
+  const show = (n) => n.toLocaleString("pl-PL", unit ? { minimumFractionDigits: 2 } : { maximumFractionDigits: 6 });
+  const example = unit ? "Wpisz kwotę, np. 10 000,00." : integer ? "Wpisz liczbę całkowitą, np. 12." : "Wpisz liczbę, np. 12,5.";
+  input.value = value == null ? "" : show(Number(value));
+  const parse = (text) => {
+    const n = pickAmount(text);
+    return n === null || (integer && !Number.isInteger(n)) ? null : n;
+  };
   const save = () => {
     if (!input.value.trim()) return commit(null);
-    const n = pickAmount(input.value);
-    return n === null ? commit(null, "Wpisz kwotę, np. 10 000,00.") : commit(n);
+    const n = parse(input.value);
+    return n === null ? commit(null, example) : commit(n);
   };
   input.addEventListener("input", save);
   input.addEventListener("blur", () => {
-    const n = pickAmount(input.value);
-    if (n !== null) input.value = n.toLocaleString("pl-PL", { minimumFractionDigits: 2 });
+    const n = parse(input.value);
+    if (n !== null) input.value = show(n);
   });
-  wrap.append(input, node("span", "amount-unit", "zł"));
+  wrap.append(input);
+  if (unit) wrap.append(node("span", "amount-unit", unit));
   return {
     element: wrap,
     apply(text) {
-      const n = pickAmount(text);
-      if (n === null) return commit(null, "W zaznaczeniu nie ma kwoty.");
-      input.value = n.toLocaleString("pl-PL", { minimumFractionDigits: 2 });
+      const n = parse(text);
+      if (n === null) return commit(null, unit ? "W zaznaczeniu nie ma kwoty." : "W zaznaczeniu nie ma liczby.");
+      input.value = show(n);
       commit(n);
+      input.focus();
+    },
+  };
+}
+
+/** Lista prostych wartości ze schematu (tablica tekstów albo liczb): jedna wartość w wierszu. */
+function linesControl(field, value, id, commit) {
+  const input = document.createElement("textarea");
+  input.id = id;
+  input.className = "box-in";
+  input.placeholder = "jedna wartość w wierszu";
+  const list = Array.isArray(value) ? value : value == null ? [] : [value];
+  input.rows = Math.max(1, list.length);
+  input.value = list.join("\n");
+  const save = () => {
+    const rows = input.value.split("\n").map((s) => s.trim()).filter(Boolean);
+    input.rows = Math.max(1, input.value.split("\n").length);
+    const values = field.numeric ? rows.map((r) => pickAmount(r)).filter((n) => n !== null) : rows;
+    commit(values);
+  };
+  input.addEventListener("input", save);
+  return {
+    element: input,
+    apply(text) {
+      const line = pickText(text);
+      input.value = input.value.trim() ? `${input.value.trim()}\n${line}` : line;
+      save();
       input.focus();
     },
   };
@@ -1749,6 +1798,33 @@ document.addEventListener("pdf-back", focusActiveField);
 
 /* ---------- typy dokumentów ---------- */
 
+let schemasLoading = null;
+/** Schematy typów spoza fields.js z GET /api/document-types (stary backend bez `schema`: zostaje genericGroup). */
+function loadSchemas({ force = false } = {}) {
+  if (state.mode !== "api") return Promise.resolve();
+  if (schemasLoading && !force) return schemasLoading;
+  schemasLoading = fetchDocumentTypes().then((types) => {
+    applyTypeList(types);
+    if (state.results) render();
+  }).catch(() => { /* brak endpointu albo stary backend: formularz z kluczy JSON */ });
+  return schemasLoading;
+}
+function applyTypeList(types) {
+  for (const t of types ?? []) {
+    if (!t?.doc_type) continue;
+    if (t.label) state.typeLabels[t.doc_type] = t.label;
+    if (!DOC_TYPES[t.doc_type] && t.schema && typeof t.schema === "object") {
+      state.schemaSpecs[t.doc_type] = schemaToSpec(t.schema, t.label ?? t.doc_type);
+    }
+  }
+}
+// kreator zapisał nowy typ w backendzie: schematy i lista typów do ponownego pobrania
+document.addEventListener("types-changed", () => {
+  state.types = null;
+  loadSchemas({ force: true });
+  if (state.view === "types") loadTypes();
+});
+
 async function loadTypes() {
   if (state.types) return renderTypes();
   el.typesSource.textContent = "Wczytywanie listy typów…";
@@ -1762,6 +1838,7 @@ async function loadTypes() {
   } else {
     try {
       state.types = { list: await fetchDocumentTypes(), source: "Lista z konfiguracji backendu (configs/documents)." };
+      applyTypeList(state.types.list);
     } catch {
       state.types = { list: local, source: "Backend nie udostępnia jeszcze listy typów (GET /api/document-types), więc pokazuję typy znane panelowi." };
     }
@@ -1854,6 +1931,7 @@ function formatSize(bytes) {
 }
 
 render();
+loadSchemas();   // tryb API: schematy typów spoza fields.js raz przy starcie
 
 /* powiększenie podglądu PDF na cały obszar arkusza (Esc wraca) */
 document.addEventListener("pdf-full", (event) => {

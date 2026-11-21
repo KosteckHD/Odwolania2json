@@ -146,7 +146,90 @@ export function emptyListItem(fields, template = null) {
     const keys = f.key.split(".");
     let target = item;
     keys.slice(0, -1).forEach((k) => { if (!target[k] || typeof target[k] !== "object") target[k] = {}; target = target[k]; });
-    if (!(keys.at(-1) in target)) target[keys.at(-1)] = f.kind === "names" ? [] : null;
+    if (!(keys.at(-1) in target)) target[keys.at(-1)] = f.kind === "names" || f.kind === "lines" ? [] : null;
   }
   return item;
+}
+
+/* ---------- formularz ze schematu JSON (typy dodane kreatorem, spoza DOC_TYPES) ---------- */
+
+/** „data_odbioru” → „Data odbioru”. */
+export function prettyKey(key) {
+  const t = String(key).replace(/[_\-.]+/g, " ").replace(/([a-ząćęłńóśźż])([A-Z])/g, "$1 $2").trim().toLowerCase();
+  return t ? t[0].toUpperCase() + t.slice(1) : String(key);
+}
+
+const typesOf = (schema) => (Array.isArray(schema?.type) ? schema.type : [schema?.type]).filter((t) => t && t !== "null");
+
+/** Długości z wzorca cyfr, np. ^[0-9]{9}$ → [9], ^\d{9}(\d{5})?$ → brak (zwykłe kratki). */
+function digitLengths(pattern) {
+  const m = String(pattern).match(/^\^(?:\[0-9\]|\d)\{(\d+)(?:,(\d+))?\}\$$/);
+  if (!m) return null;
+  return m[2] ? [Number(m[1]), Number(m[2])] : [Number(m[1])];
+}
+
+/** Rubryka dla prostej wartości schematu; null, gdy to obiekt albo tablica obiektów. */
+export function fieldFromSchema(key, schema, label = schema?.description || prettyKey(key.split(".").at(-1))) {
+  const types = typesOf(schema);
+  const type = types[0];
+  if (type === "boolean") return { key, label, kind: "bool" };
+  if (type === "number" || type === "integer") {
+    const money = /kwot|amount|cena|oplat|opłat|wartosc|wartość/i.test(key);
+    return { key, label, kind: money ? "amount" : "number", integer: type === "integer" };
+  }
+  if (type === "string") {
+    if (schema.format === "date") return { key, label, kind: "date" };
+    if (typeof schema.pattern === "string" && /^\^(?:\[0-9\]|\d)(?:\+|\*|\{\d+(?:,\d+)?\})\$$/.test(schema.pattern)) {
+      const lengths = digitLengths(schema.pattern);
+      return { key, label, kind: "digits", ...(lengths ? { lengths } : {}) };
+    }
+    if (schema.enum?.length) return { key, label, kind: "enum", labels: Object.fromEntries(schema.enum.filter((v) => v !== null).map((v) => [v, prettyKey(v)])) };
+    const long = (schema.maxLength ?? 0) > 120 || /opis|tytul|tytuł|uwagi|tresc|treść|nazwa|adres/i.test(key);
+    return { key, label, kind: "text", ...(long ? { wide: true } : {}) };
+  }
+  if (type === "array") {
+    const item = schema.items ?? {};
+    if (typesOf(item)[0] === "object") return null;
+    const itemType = typesOf(item)[0];
+    return { key, label, kind: "lines", wide: true, numeric: itemType === "number" || itemType === "integer" };
+  }
+  if (type === "object") return null;
+  return { key, label, kind: "text" };
+}
+
+/** Rubryki obiektu: proste pola, a zagnieżdżone obiekty spłaszczone do kluczy z kropką. */
+function objectFields(schema, prefix = "") {
+  const fields = [];
+  for (const [key, prop] of Object.entries(schema?.properties ?? {})) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    const field = fieldFromSchema(path, prop);
+    if (field) fields.push(field);
+    else if (typesOf(prop)[0] === "object") fields.push(...objectFields(prop, path));
+  }
+  return fields;
+}
+
+/**
+ * Opis formularza (jak w DOC_TYPES) zbudowany ze schematu klasy:
+ * proste pola z poziomu głównego w jednej grupie, zagnieżdżony obiekt jako osobna grupa,
+ * tablica obiektów jako grupa listy (z dodawaniem i usuwaniem pozycji).
+ * @returns {{label: string, fromSchema: true, groups: Array}}
+ */
+export function schemaToSpec(schema, label) {
+  const root = [];
+  const groups = [];
+  for (const [key, prop] of Object.entries(schema?.properties ?? {})) {
+    const type = typesOf(prop)[0];
+    const title = prop?.description || prettyKey(key);
+    if (type === "object") {
+      groups.push({ title, path: key, fields: objectFields(prop) });
+    } else if (type === "array" && typesOf(prop.items)[0] === "object") {
+      groups.push({ title, path: key, list: true, item: "pozycję", fields: objectFields(prop.items) });
+    } else {
+      const field = fieldFromSchema(key, prop);
+      if (field) root.push(field);
+    }
+  }
+  if (root.length) groups.unshift({ title: "Dane dokumentu", path: "", root: true, fields: root });
+  return { label, fromSchema: true, groups };
 }
