@@ -5,6 +5,23 @@ import json
 from pathlib import Path
 
 
+SCAN_CLASSES = {"odwolania": "odwolanie", "pelnomocnictwa": "pelnomocnictwo", "potwierdzenia": "przelew"}
+
+
+def scan_documents(data: Path):
+    scans = data / "skany"
+    for pdf in sorted(scans.rglob("*.pdf")):
+        category = pdf.relative_to(scans).parts[0]
+        if category not in SCAN_CLASSES:
+            raise ValueError(f"Nieznana kategoria skanu: {category}")
+        reference = pdf.with_suffix(".json")
+        if not reference.is_file():
+            raise FileNotFoundError(reference)
+        relative_json = reference.relative_to(data).as_posix()
+        yield {"split": "scans", "type": SCAN_CLASSES[category], "prediction": relative_json,
+               "reference": relative_json}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, required=True)
@@ -31,8 +48,9 @@ def main():
                 negative_hashes[digest] = split
                 entry["sha256"] = digest
             documents.append(entry)
+    documents.extend(scan_documents(args.data))
     if not documents:
-        raise ValueError("Nie znaleziono spraw")
+        raise ValueError("Nie znaleziono spraw ani skanów")
     for pdf in sorted((args.data / "negatywne").glob("*.pdf")):
         digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
         split = negative_hashes.setdefault(digest, "validation")

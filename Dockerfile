@@ -8,5 +8,6 @@ COPY src ./src
 COPY configs ./configs
 COPY schemas ./schemas
 COPY prompts ./prompts
+COPY frontend ./frontend
 RUN mkdir input output
 CMD ["python", "main.py"]

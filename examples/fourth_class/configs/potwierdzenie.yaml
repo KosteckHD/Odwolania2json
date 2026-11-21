@@ -1,6 +1,0 @@
-id: potwierdzenie
-schema: potwierdzenie.schema.json
-classification:
-  positive_patterns: ['(?i)POTWIERDZENIE ODBIORU']
-options:
-  llm_instructions: "Potwierdzenie odbioru dokumentów z nagłówkiem POTWIERDZENIE ODBIORU. Pole numer to numer potwierdzenia, pole data to data odbioru w ISO."

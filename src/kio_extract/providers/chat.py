@@ -7,6 +7,32 @@ from ..contracts import ConfigurationError, DocumentError, JsonObject
 from .rate_limit import RateLimitSettings, coordinator
 
 
+def structured_json_schema(schema: JsonObject) -> JsonObject:
+    """Trim prompt-only annotations and conditionals for Mistral's strict JSON mode."""
+    supported = {
+        "type", "properties", "items", "enum", "const", "anyOf", "oneOf", "required",
+        "additionalProperties", "format", "description", "title", "minimum", "maximum",
+        "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "pattern",
+        "minItems", "maxItems",
+    }
+    result = {}
+    for key, value in schema.items():
+        if key not in supported:
+            continue
+        if key == "properties" and isinstance(value, dict):
+            result[key] = {name: structured_json_schema(child) for name, child in value.items()}
+        elif key in {"items"} and isinstance(value, dict):
+            result[key] = structured_json_schema(value)
+        elif key in {"anyOf", "oneOf"} and isinstance(value, list):
+            result[key] = [structured_json_schema(child) for child in value]
+        else:
+            result[key] = value
+    if result.get("type") == "object" and isinstance(result.get("properties"), dict):
+        result["required"] = list(result["properties"])
+        result["additionalProperties"] = False
+    return result
+
+
 class ChatClient:
     def __init__(self, base_url: str, model: str, api_key: str):
         try:
@@ -27,6 +53,9 @@ class ChatClient:
         self.connection = HTTPSConnection if url.scheme == "https" else HTTPConnection
         self.path = url.path.rstrip("/") + "/chat/completions"
         self.model = model
+        self.uses_json_schema = hostname.casefold() in {
+            "api.mistral.ai", "api.eu.mistral.ai", "api.us.mistral.ai",
+        }
         self.rate_limit = RateLimitSettings.from_environment()
         self.last_usage = None
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -48,7 +77,11 @@ class ChatClient:
             {
                 "model": self.model,
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
-                "response_format": {"type": "json_object"},
+                "response_format": (
+                    {"type": "json_schema", "json_schema": {
+                        "name": "odwolania2json", "schema": structured_json_schema(schema), "strict": True,
+                    }} if self.uses_json_schema else {"type": "json_object"}
+                ),
                 "temperature": 0,
             },
             ensure_ascii=False,

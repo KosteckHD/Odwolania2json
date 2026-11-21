@@ -4,6 +4,20 @@ import hashlib
 import json
 
 from evaluation.evaluate import compare, evaluate, metrics
+from evaluation.create_manifest import scan_documents
+
+
+def test_scan_manifest_keeps_identical_names_in_distinct_classes(tmp_path):
+    for category in ("odwolania", "pelnomocnictwa", "potwierdzenia"):
+        scan = tmp_path / "skany" / category / "0001" / "0001.pdf"
+        scan.parent.mkdir(parents=True)
+        scan.touch()
+        scan.with_suffix(".json").write_text("{}", encoding="utf-8")
+
+    entries = list(scan_documents(tmp_path))
+    assert {entry["type"] for entry in entries} == {"odwolanie", "pelnomocnictwo", "przelew"}
+    assert len({entry["prediction"] for entry in entries}) == 3
+    assert all(entry["split"] == "scans" and (tmp_path / entry["reference"]).is_file() for entry in entries)
 
 
 def test_list_matching_prevents_mixing_parties():

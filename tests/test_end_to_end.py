@@ -95,6 +95,7 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
         {"typ": "przelew", "dane": payment},
         {"typ": "unknown", "dane": None},
         {"typ": "przelew", "dane": {"przelew_bankowy": {"kwota": "brak danych"}}},
+        {"typ": "przelew", "dane": {"przelew_bankowy": {"kwota": "brak danych"}}},
     ])
     requests = []
 
@@ -119,7 +120,7 @@ def test_llm_batch_separates_instructions_and_checks_schema(tmp_path, monkeypatc
     monkeypatch.delenv("LLM_API_KEY", raising=False)
 
     assert main(["--llm", "--input", str(input_dir), "--output", str(output_dir)]) == 1
-    assert len(requests) == 3
+    assert len(requests) == 4
     assert requests[0]["response_format"] == {"type": "json_object"}
     system, user = requests[0]["messages"]
     assert system["role"] == "system"

@@ -18,13 +18,17 @@ Na Linuksie używaj `python3.13 -m venv .venv` i `.venv/bin/python`. Umieść np
 
 ## Tryb LLM
 
-Ustaw `LLM_BASE_URL` na bazę zgodnego API Chat Completions, np. adres zakończony `/v1`, `LLM_MODEL` na nazwę obsługiwaną przez ten endpoint i `LLM_API_KEY` w środowisku procesu lub w lokalnym `.env`. Obsługiwana jest także nazwa `API_KEY`. Zmienne procesu mają pierwszeństwo przed `.env`. Endpoint Chat Completions musi obsługiwać `response_format: json_object`. Wywołanie `--llm` przesyła tekst stron PDF do skonfigurowanego API. Do danych konkursowych wybierz otwarty model i zweryfikuj, że firma oraz serwery API są w UE/EOG. [Wymagania UZP](https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026#6-spos%C3%B3b-testowania-i-walidacji)
+Ustaw `LLM_BASE_URL` na bazę zgodnego API Chat Completions, np. adres zakończony `/v1`, `LLM_MODEL` na nazwę obsługiwaną przez ten endpoint i `LLM_API_KEY` w środowisku procesu lub w lokalnym `.env`. Obsługiwana jest także nazwa `API_KEY`. Zmienne procesu mają pierwszeństwo przed `.env`. Zwykłe endpointy używają `response_format: json_object`; regionalne endpointy Mistral korzystają z wymuszonego JSON Schema, a wynik jest dodatkowo walidowany lokalnie. Wywołanie `--llm` przesyła tekst stron PDF do skonfigurowanego API. Według FAQ przekazanego przez użytkownika konfiguracja konkursowa wymaga modelu open source dostępnego do lokalnej instalacji, bez ograniczeń użytkowania i opłat licencyjnych, oraz usługodawcy i serwerów API w UE. Organizator wymaga przekazania klucza do prób. [Wymagania UZP](https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026#6-spos%C3%B3b-testowania-i-walidacji)
 
 ```powershell
 .venv/Scripts/python.exe main.py --llm --input ./input --output ./output
 ```
 
 Model dostaje instrukcje i schematy w wiadomości `system`, a tekst stron w `user`. Zwraca `typ` i `dane`. Dla `unknown` CLI stosuje tryb wyniku negatywnego, a dla rozpoznanej klasy zapisuje zwalidowane `dane`. Do porównania wersji użyj `--prompt ścieżka.md` i oddzielnych katalogów `--output` przy tym samym modelu i zbiorze. Reguły klasy można dopisać w jej YAML jako `options.llm_instructions`.
+
+Domyślny prompt wymaga mianownika we wszystkich polach `imie_nazwisko`. Nazwy podmiotów i pełne firmy przedsiębiorców zachowują pisownię źródła.
+
+Regresje `nominative_appeal_representative` i `nominative_authorization_roles` w `evaluation/prompt_cases.json` sprawdzają zapis danych osób. Skrypt `evaluation/prompt_regression.py` przyjmuje powtarzany argument `--case` i wysyła wybrane syntetyczne przykłady do skonfigurowanego API.
 
 Przy dużych zbiorach żądania w jednym procesie są szeregowane i domyślnie dzieli je co najmniej sekunda. Odpowiedź HTTP 429 powoduje ponowienie, z uwzględnieniem nagłówka `Retry-After` albo rosnącego czasu oczekiwania. Tempo i limity ustawiają zmienne `LLM_REQUEST_INTERVAL_SECONDS` (domyślnie `1`), `LLM_MAX_429_RETRIES` (`4`) oraz `LLM_MAX_RETRY_WAIT_SECONDS` (`60`). Ostatni parametr ogranicza pojedyncze oczekiwanie. Po wyczerpaniu ponowień dokument otrzymuje błąd `llm_rate_limit`, a batch przechodzi do następnego pliku. Ponowienia 429 mogą zwiększyć liczbę żądań na PDF.
 
@@ -33,6 +37,10 @@ Odstęp dopasuj do limitów żądań oraz tokenów konkretnego konta i modelu. K
 Do natywnego Claude Messages ustaw `LLM_PROVIDER=anthropic`, `LLM_BASE_URL=https://api.anthropic.com/v1`, identyfikator Sonnet w `LLM_MODEL` oraz klucz w `LLM_API_KEY` lub `API_KEY`. Adapter używa strukturalnej koperty JSON, a pełny schemat dokumentu waliduje lokalnie. Próby deweloperskie Claude Sonnet na danych syntetycznych zostały wykonane. Warunki UZP dotyczące otwartego modelu oraz lokalizacji dostawcy i serwerów opisano w dokumentacji projektu.
 
 API uruchom przez `.venv/Scripts/python.exe -m uvicorn --app-dir src kio_extract.api:create_app --factory --host 127.0.0.1 --port 8000`. Gdy `LLM_MODEL` jest ustawiony, API korzysta z LLM. W innym przypadku działa tryb regułowy. `POST /api/extract` przyjmuje pola `files` według [kontraktu](docs/INTERFACES.md#api-dla-frontendu).
+
+API przyjmuje opcjonalne zmienne `KIO_CONFIGS_DIR`, `KIO_SCHEMAS_DIR` i `KIO_PROMPT_PATH`. Wskaż katalogi zawierające kompletny zestaw klas oraz schematów, aby dodać klasę bez modyfikacji kodu. Compose montuje `./configs/documents` i `./schemas` jako katalogi tylko do odczytu; własny pełny zestaw podaj przez `KIO_CONFIGS_HOST_DIR` i `KIO_SCHEMAS_HOST_DIR`. Compose przekazuje klucz z `LLM_API_KEY`, `MISTRA_API_KEY` lub `API_KEY`; dla Mistral ustaw `LLM_BASE_URL=https://api.eu.mistral.ai/v1` i `LLM_MODEL` w środowisku lub `.env`. [Instrukcja dodawania klasy](docs/ADD_DOCUMENT_TYPE.md).
+
+Do pokazu z przypiętym kandydatem Mistral EU (Ministral 3 8B, `ministral-8b-2512`) uruchom `.venv/Scripts/python.exe start_jury.py`. Skrypt wymaga `MISTRA_API_KEY` w środowisku lub lokalnym `.env`, ustawia regionalny endpoint i nie przełączy się po cichu na tryb regułowy. To profil pokazu, nie wybrany model końcowy: pełne porównanie jakości 8B/14B oczekuje na zwolnienie limitu API.
 
 Do integracji frontendu na syntetycznych PDF-ach uruchom `.venv/Scripts/python.exe tests/support/fake_llm_server.py` w osobnym terminalu. W terminalu API ustaw `$env:LLM_PROVIDER='chat'`, `$env:LLM_BASE_URL='http://127.0.0.1:8765/v1'` i `$env:LLM_MODEL='fixture'`, a następnie uruchom API podaną komendą. Atrapa rozpoznaje syntetyczny tekst potwierdzenia przelewu i zwraca puste pola zgodne ze schematem.
 
@@ -50,11 +58,20 @@ Wyniki eksperymentów i ograniczenia pomiaru opisuje [porównanie modeli](docs/M
 
 Raport opisuje lokalny micro-F1, wyniki według pól i klas, macierz klasyfikacji oraz błędy. W obrębie list obiektów dopasowuje jednoznaczne identyfikatory, a pozostałe wartości porównuje jako wielozbiory. Ta metryka służy do porównywania wersji projektu.
 
+Manifest `evaluation/manifest_scans.json` obejmuje 30 opublikowanych przez UZP par PDF i JSON. Zachowaj strukturę `dane/skany/<kategoria>/<numer>/` z [zestawu skanów UZP](https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026/tree/84cc976f0a9af5cee14f131c795f929134ca0fda/dane/skany). Uruchom backend na katalogu `dane` zawierającym skany i użyj `--split scans` z osobnym manifestem:
+
+```powershell
+docker build -t odwolania2json-scan-check .
+$scanRoot = (Resolve-Path '.local/uzp-scans').Path
+docker run --rm --network none --mount "type=bind,source=$scanRoot,target=/data" odwolania2json-scan-check python main.py --input /data/dane --output /data/rules-output --report /data/rules-run.json
+.venv/Scripts/python.exe evaluation/evaluate.py --manifest evaluation/manifest_scans.json --data .local/uzp-scans/dane --predictions .local/uzp-scans/rules-output --split scans --run-report .local/uzp-scans/rules-run.json --output artifacts/uzp-scans-rules.json
+```
+
 Wynik pomiaru LLM można opatrzyć argumentami `--model`, `--revision` i `--prompt-version`, aby kolejne raporty wskazywały użyty model oraz wersję kodu i prompta.
 
 Przy ponawianiu przetwarzania użyj opcji CLI `--report artifacts/run.json`, a następnie przekaż evaluatorowi `--run-report artifacts/run.json`. Raport przechowuje status i skrót zapisanego pliku. Evaluator traktuje błąd dokumentu, brak wpisu oraz zmieniony wynik jako błąd, również gdy w `output/` znajduje się plik z wcześniejszego przebiegu. Raport powstaje po zakończeniu batcha, dlatego dla każdego nowego uruchomienia używaj odrębnej ścieżki raportu.
 
-Kontenery można uruchomić przez `docker compose run --build --rm batch` lub `docker compose up --build api`. Obraz instaluje Tesseract i pakiet języka polskiego. Przetwarzanie batcha przez LLM wymaga argumentu `--llm`, np. `docker compose run --build --rm batch python main.py --llm`.
+Kontenery można uruchomić przez `docker compose run --build --rm batch` lub `docker compose up --build api`. Obraz instaluje Tesseract i pakiet języka polskiego. Przetwarzanie batcha przez LLM wymaga argumentu `--llm`, np. `docker compose run --build --rm batch python main.py --llm`. Dla dodatkowej klasy ustaw hostowe katalogi zawierające komplet YAML-i i schematów, np. `$env:KIO_CONFIGS_HOST_DIR='.local/demo-configs'` i `$env:KIO_SCHEMAS_HOST_DIR='.local/demo-schemas'`, przed `docker compose up --build api`.
 
 ## Tryb regułowy
 

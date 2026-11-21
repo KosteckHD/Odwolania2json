@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["numer", "data_odbioru", "podpisane"],
+  "properties": {
+    "numer": {
+      "type": ["string", "null"],
+      "description": "Numer potwierdzenia"
+    },
+    "data_odbioru": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "Data odbioru"
+    },
+    "podpisane": {
+      "type": ["boolean", "null"],
+      "description": "Czy dokument jest podpisany"
+    }
+  }
+}

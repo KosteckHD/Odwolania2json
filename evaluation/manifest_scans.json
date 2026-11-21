@@ -1,0 +1,184 @@
+{
+  "documents": [
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0001/0001.json",
+      "reference": "skany/odwolania/0001/0001.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0002/0002.json",
+      "reference": "skany/odwolania/0002/0002.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0003/0003.json",
+      "reference": "skany/odwolania/0003/0003.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0004/0004.json",
+      "reference": "skany/odwolania/0004/0004.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0005/0005.json",
+      "reference": "skany/odwolania/0005/0005.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0006/0006.json",
+      "reference": "skany/odwolania/0006/0006.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0007/0007.json",
+      "reference": "skany/odwolania/0007/0007.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0008/0008.json",
+      "reference": "skany/odwolania/0008/0008.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0009/0009.json",
+      "reference": "skany/odwolania/0009/0009.json"
+    },
+    {
+      "split": "scans",
+      "type": "odwolanie",
+      "prediction": "skany/odwolania/0010/0010.json",
+      "reference": "skany/odwolania/0010/0010.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0001/0001.json",
+      "reference": "skany/pelnomocnictwa/0001/0001.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0002/0002.json",
+      "reference": "skany/pelnomocnictwa/0002/0002.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0003/0003.json",
+      "reference": "skany/pelnomocnictwa/0003/0003.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0004/0004.json",
+      "reference": "skany/pelnomocnictwa/0004/0004.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0005/0005.json",
+      "reference": "skany/pelnomocnictwa/0005/0005.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0006/0006.json",
+      "reference": "skany/pelnomocnictwa/0006/0006.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0007/0007.json",
+      "reference": "skany/pelnomocnictwa/0007/0007.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0008/0008.json",
+      "reference": "skany/pelnomocnictwa/0008/0008.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0009/0009.json",
+      "reference": "skany/pelnomocnictwa/0009/0009.json"
+    },
+    {
+      "split": "scans",
+      "type": "pelnomocnictwo",
+      "prediction": "skany/pelnomocnictwa/0010/0010.json",
+      "reference": "skany/pelnomocnictwa/0010/0010.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0001/0001.json",
+      "reference": "skany/potwierdzenia/0001/0001.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0002/0002.json",
+      "reference": "skany/potwierdzenia/0002/0002.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0003/0003.json",
+      "reference": "skany/potwierdzenia/0003/0003.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0004/0004.json",
+      "reference": "skany/potwierdzenia/0004/0004.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0005/0005.json",
+      "reference": "skany/potwierdzenia/0005/0005.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0006/0006.json",
+      "reference": "skany/potwierdzenia/0006/0006.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0007/0007.json",
+      "reference": "skany/potwierdzenia/0007/0007.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0008/0008.json",
+      "reference": "skany/potwierdzenia/0008/0008.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0009/0009.json",
+      "reference": "skany/potwierdzenia/0009/0009.json"
+    },
+    {
+      "split": "scans",
+      "type": "przelew",
+      "prediction": "skany/potwierdzenia/0010/0010.json",
+      "reference": "skany/potwierdzenia/0010/0010.json"
+    }
+  ]
+}

@@ -12,10 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from kio_extract.contracts import DocumentError, ExtractedDocument, PageText
-from kio_extract.processing import normalize_result
+from kio_extract.processing import normalize_result, recover_repeated_transfer_title
 from kio_extract.prompt_extraction import PromptExtractor
 from kio_extract.providers.config import client_from_environment
 from kio_extract.schema_registry import load_configs
+
+
+MISSING = object()
 
 
 def lookup(data, path):
@@ -25,19 +28,26 @@ def lookup(data, path):
             current = current[int(item)] if isinstance(current, list) else current[item]
         return current
     except (KeyError, IndexError, TypeError, ValueError):
-        return None
+        return MISSING
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", type=Path, default=ROOT / "prompts/system_pl.md")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--case", action="append", help="ID przypadku, można podać wielokrotnie")
     args = parser.parse_args()
     load_dotenv(ROOT / ".env", override=False)
     configs = load_configs(ROOT / "configs/documents", ROOT / "schemas")
     client = client_from_environment()
     extractor = PromptExtractor(client, tuple(configs.values()), args.prompt)
     cases = json.loads((ROOT / "evaluation/prompt_cases.json").read_text(encoding="utf-8"))
+    if args.case:
+        requested = set(args.case)
+        cases = [case for case in cases if case["id"] in requested]
+        missing = requested - {case["id"] for case in cases}
+        if missing:
+            parser.error("Nieznane ID przypadków: " + ", ".join(sorted(missing)))
     results = []
     for case in cases:
         started = time.monotonic()
@@ -48,6 +58,8 @@ def main():
             if classification.doc_type != "unknown":
                 schema = configs[classification.doc_type].schema
                 data = normalize_result(data, schema)
+                if classification.doc_type == "przelew":
+                    data = recover_repeated_transfer_title(data, doc)
                 Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(data)
             checks = {path: lookup(data, path) == value for path, value in case["checks"].items()}
             result = {"id": case["id"], "expected_type": case["type"], "actual_type": classification.doc_type,
@@ -55,6 +67,8 @@ def main():
         except Exception as exc:
             code = exc.code if isinstance(exc, DocumentError) else type(exc).__name__
             result = {"id": case["id"], "passed": False, "error": code}
+            if isinstance(exc, DocumentError) and exc.code == "llm_json":
+                result["error_stage"] = str(exc)
         result["duration_seconds"] = round(time.monotonic() - started, 3)
         if client.last_usage:
             result["usage"] = client.last_usage

@@ -17,6 +17,8 @@ Zwróć wyłącznie jeden obiekt JSON z kluczami `typ` i `dane`, bez komentarzy,
 
 Jeżeli konfiguracja zawiera `options.llm_instructions`, zastosuj te wskazówki do klasy, której dotyczą.
 
+We wszystkich polach `imie_nazwisko` wpisuj imię i nazwisko w mianowniku, niezależnie od roli osoby. Przykład: „udzielam pełnomocnictwa Mateuszowi Szymańskiemu” → `Mateusz Szymański`, a „reprezentowany przez Mateusza Szymańskiego” → `Mateusz Szymański`. Zachowaj pisownię, polskie znaki i człony nazwiska. Jeżeli odmieniona forma jest niejednoznaczna, szukaj potwierdzenia w podpisie lub wykazie osób w tym dokumencie. Nie zgaduj brakujących danych. Nazwy podmiotów oraz pełne firmy przedsiębiorców przepisuj w brzmieniu źródłowym.
+
 Daty jednoznaczne zapisz jako `RRRR-MM-DD`. Numery KRS, NIP, REGON i rachunki traktuj jako tekst. Usuń separatory w samym numerze i zachowaj zera wiodące. Nazwy i tytuły przepisuj z dokumentu, łącząc wiersze rozbite przez układ PDF. Zachowuj znaki diakrytyczne. Nie używaj znaków zastępczych ani wartości z pamięci.
 
 ## Odwołanie

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Odwołania2JSON: wgraj PDF-y sprawy odwoławczej KIO i pobierz dane w formacie JSON Urzędu Zamówień Publicznych.">
+  <meta name="theme-color" content="#B3341A">
+  <title>Odwołania2JSON · panel ekstrakcji</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="./fonts/public-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+  <script type="module" src="./wizard.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Przejdź do treści</a>
+
+  <svg class="icon-defs" aria-hidden="true" focusable="false">
+    <symbol id="i-case" viewBox="0 0 24 24"><path d="M4 7.5h16v11.5H4z"/><path d="M9 7.5V5h6v2.5"/><path d="M4 12h16"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6"/><path d="M12 16.6v.1"/></symbol>
+    <symbol id="i-new" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4"/><path d="M12 11v6M9 14h6"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M14.5 6.5 9 12l5.5 5.5"/><path d="M4.5 4v16"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4.5"/><path d="M7.5 9 12 4.5 16.5 9"/><path d="M4.5 15v4.5h15V15"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4.5v11"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4.5 15v4.5h15V15"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-types" viewBox="0 0 24 24"><path d="M4 5.5h7v6H4zM13 5.5h7v6h-7zM4 13.5h7v6H4z"/><path d="M16.5 14v5M14 16.5h5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 6.5h6l2 2h9v10h-17z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8.5 8.5h11v11h-11z"/><path d="M15.5 8.5v-4h-11v11h4"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4"/><path d="M9 12h6M9 15.5h6"/></symbol>
+  </svg>
+
+  <div class="app" id="app" data-nav="expanded">
+    <!-- Zwijany pasek nawigacji -->
+    <nav class="rail" id="rail" aria-label="Menu główne">
+      <div class="rail-head">
+        <span class="rail-mark" aria-hidden="true">O2J</span>
+        <span class="rail-name">Odwołania2JSON</span>
+        <button class="rail-toggle" id="nav-toggle" type="button" aria-controls="rail" aria-expanded="true">
+          <svg class="ic" aria-hidden="true"><use href="#i-collapse"/></svg>
+          <span class="sr-only" id="nav-toggle-label">Zwiń menu</span>
+        </button>
+      </div>
+
+      <ul class="rail-list">
+        <li>
+          <button class="rail-item" type="button" data-view="case" aria-current="page" title="Sprawa">
+            <svg class="ic" aria-hidden="true"><use href="#i-case"/></svg>
+            <span class="rail-label">Sprawa</span>
+          </button>
+        </li>
+        <li>
+          <button class="rail-item" type="button" data-view="help" title="Instrukcja">
+            <svg class="ic" aria-hidden="true"><use href="#i-help"/></svg>
+            <span class="rail-label">Instrukcja</span>
+          </button>
+        </li>
+        <li>
+          <button class="rail-item" type="button" id="new-case" title="Nowa sprawa">
+            <svg class="ic" aria-hidden="true"><use href="#i-new"/></svg>
+            <span class="rail-label">Nowa sprawa</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="rail-admin">
+        <p class="rail-group rail-label">Dla administratora</p>
+        <ul class="rail-list rail-list-admin">
+          <li>
+            <button class="rail-item" type="button" data-view="types" title="Typy dokumentów (administrator)">
+              <svg class="ic" aria-hidden="true"><use href="#i-types"/></svg>
+              <span class="rail-label">Typy dokumentów</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="rail-foot">
+        <label class="rail-setting" for="mode-select">
+          <span class="rail-label">Źródło wyników</span>
+          <select id="mode-select">
+            <option value="api">API backendu</option>
+            <option value="mock">Dane przykładowe</option>
+          </select>
+        </label>
+      </div>
+    </nav>
+
+    <div class="rail-scrim" id="rail-scrim" hidden></div>
+
+    <div class="work">
+      <header class="topbar">
+        <button class="menu-btn" id="menu-btn" type="button" aria-controls="rail" aria-expanded="false">
+          <svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg>
+          <span class="sr-only">Otwórz menu</span>
+        </button>
+        <span class="brand-mini" aria-hidden="true"><span class="brand-mini-mark">O2J</span><span class="brand-mini-text">Odwołania2JSON</span></span>
+        <span class="topbar-sep" aria-hidden="true"></span>
+        <h1 class="page-title" id="page-title">Sprawa odwoławcza</h1>
+        <ol class="steps" id="steps" aria-label="Kroki">
+          <li data-step="1"><span class="step-no">1</span><span class="step-label">Wgraj PDF-y</span></li>
+          <li data-step="2"><span class="step-no">2</span><span class="step-label">Przetwórz</span></li>
+          <li data-step="3"><span class="step-no">3</span><span class="step-label">Sprawdź i pobierz</span></li>
+        </ol>
+        <span class="mode-flag" id="mode-flag" hidden>Dane przykładowe</span>
+      </header>
+
+      <main id="main" tabindex="-1">
+        <!-- Widok: sprawa -->
+        <div class="view-case" id="view-case">
+          <section class="docs" id="docs" aria-labelledby="docs-heading">
+            <div class="docs-head">
+              <h2 class="sec" id="docs-heading">Dokumenty sprawy</h2>
+              <button class="docs-toggle" id="docs-toggle" type="button" aria-expanded="true" aria-controls="docs-body" title="Zwiń listę dokumentów">
+                <svg class="ic" aria-hidden="true"><use href="#i-collapse"/></svg>
+                <span class="sr-only" id="docs-toggle-label">Zwiń listę dokumentów</span>
+              </button>
+            </div>
+            <ol class="docs-mini" id="docs-mini" aria-label="Dokumenty sprawy (lista zwinięta)" hidden></ol>
+
+            <div class="docs-body" id="docs-body">
+            <form id="upload-form" class="upload" novalidate>
+              <div class="drop" id="drop">
+                <svg class="ic ic-lg" aria-hidden="true"><use href="#i-upload"/></svg>
+                <p class="drop-title">Przeciągnij tutaj pliki PDF</p>
+                <p class="drop-hint">wszystkie dokumenty jednej sprawy naraz</p>
+                <div class="drop-buttons">
+                  <label class="btn btn-line" for="file-input" id="file-label">Wybierz pliki z dysku</label>
+                  <label class="btn btn-line" for="folder-input" id="folder-label">
+                    <svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Folder sprawy
+                  </label>
+                </div>
+                <input id="file-input" class="file-input" name="files" type="file" accept="application/pdf,.pdf" multiple>
+                <input id="folder-input" class="file-input" type="file" webkitdirectory multiple>
+              </div>
+
+              <div id="request-message" class="alert" role="alert" hidden>
+                <p id="request-text"></p>
+                <button id="retry-request" class="btn btn-line" type="button" hidden>Spróbuj ponownie</button>
+              </div>
+
+              <section id="restore-box" class="restore" aria-labelledby="restore-title" hidden>
+                <h3 class="restore-title" id="restore-title">Przywrócić poprawki?</h3>
+                <p class="restore-text" id="restore-text"></p>
+                <div class="restore-buttons">
+                  <button id="restore-yes" class="btn" type="button">Przywróć</button>
+                  <button id="restore-no" class="btn btn-line" type="button">Nie, odrzuć</button>
+                </div>
+              </section>
+
+              <div class="actions" id="actions" hidden>
+                <button id="retry-failed" class="btn btn-primary" type="button" hidden>Ponów błędne</button>
+                <button id="submit-btn" class="btn btn-primary" type="submit">Przetwórz pliki</button>
+                <button id="cancel-btn" class="btn btn-line btn-block" type="button" hidden>Anuluj</button>
+                <p class="actions-note" id="actions-note" aria-live="polite"></p>
+              </div>
+              <p id="announcer" class="sr-only" role="status"></p>
+
+              <ol id="file-list" class="file-list" aria-label="Wybrane pliki"></ol>
+            </form>
+
+            <section class="summary" id="summary" aria-labelledby="summary-heading" hidden>
+              <h2 class="sec" id="summary-heading">Wynik sprawy</h2>
+              <dl class="tally" id="tally"></dl>
+              <button class="btn btn-line btn-block" id="download-all" type="button">
+                <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
+                <span id="download-all-label">Pobierz wszystkie JSON-y</span>
+              </button>
+              <p class="unsaved-note" id="unsaved-note" hidden></p>
+            </section>
+            </div>
+          </section>
+
+          <section class="sheet" id="sheet" aria-labelledby="sheet-heading">
+            <!-- treść arkusza renderuje app.js -->
+          </section>
+        </div>
+
+        <!-- Widok: instrukcja -->
+        <!-- Widok: typy dokumentów -->
+        <article class="view-types" id="view-types" hidden aria-labelledby="types-heading">
+          <h2 class="help-title" id="types-heading">Typy dokumentów</h2>
+          <p class="admin-note"><strong>Sekcja dla administratora systemu.</strong> Do codziennej pracy z dokumentami nie jest potrzebna: urzędnik tylko wgrywa PDF-y sprawy i pobiera wyniki.</p>
+          <p class="help-lead">Tu widać, jakie rodzaje dokumentów aplikacja rozpoznaje i jakie dane z nich wyciąga. Nowy rodzaj dokumentu dodaje administrator lub dział IT przez pliki konfiguracyjne, bez zmiany kodu aplikacji. Panel pokaże jego pola automatycznie.</p>
+          <p class="types-source" id="types-source"></p>
+          <div class="types-list" id="types-list"></div>
+          <h3 class="help-sub">Jak dodać nowy typ dokumentu (administrator, dział IT)</h3>
+          <div class="type-wizard" id="type-wizard"><!-- kreator renderuje wizard.js --></div>
+          <ol class="help-steps">
+            <li><h3>Schemat danych</h3><p>Dodaj plik <code>schemas/&lt;typ&gt;.schema.json</code> z polami, które mają trafić do JSON-a.</p></li>
+            <li><h3>Konfiguracja klasy</h3><p>Dodaj plik <code>configs/documents/&lt;typ&gt;.yaml</code> ze wzorcami rozpoznawania i wskazówkami dla modelu.</p></li>
+            <li><h3>Gotowe</h3><p>Po ponownym uruchomieniu aplikacja rozpoznaje nowy typ, a panel pokazuje jego pola i pozwala pobrać JSON.</p></li>
+          </ol>
+        </article>
+
+        <article class="view-help" id="view-help" hidden aria-labelledby="help-heading">
+          <h2 class="help-title" id="help-heading">Jak korzystać z panelu</h2>
+          <p class="help-lead">Panel zamienia dokumenty jednej sprawy odwoławczej KIO na pliki JSON w formacie Urzędu Zamówień Publicznych. Każdy PDF jest rozpoznawany osobno.</p>
+          <ol class="help-steps">
+            <li>
+              <h3>Wgraj PDF-y sprawy</h3>
+              <p>Przeciągnij pliki na pole „Dokumenty sprawy” albo wybierz je z dysku. Możesz dodać odwołanie, pełnomocnictwo, potwierdzenie przelewu i inne pisma. Kolejność na liście to kolejność przetwarzania.</p>
+            </li>
+            <li>
+              <h3>Kliknij „Przetwórz pliki”</h3>
+              <p>System rozpozna typ każdego dokumentu i wyciągnie z niego dane. Przy dużych sprawach może to potrwać kilkanaście sekund.</p>
+            </li>
+            <li>
+              <h3>Sprawdź dane i pobierz JSON</h3>
+              <p>Kliknij plik na liście, żeby zobaczyć jego dane w rubrykach. Przycisk „Pobierz” zapisuje plik JSON gotowy dla systemów urzędu.</p>
+            </li>
+          </ol>
+          <h3 class="help-sub">Co oznaczają statusy</h3>
+          <dl class="help-status">
+            <div><dt><span class="badge badge-ok">Odwołanie</span></dt><dd>Typ rozpoznany, dane wyciągnięte i sprawdzone schematem UZP.</dd></div>
+            <div><dt><span class="badge badge-unknown">Nie rozpoznano</span></dt><dd>Dokument nie jest odwołaniem, pełnomocnictwem ani potwierdzeniem przelewu. Nie powstaje dla niego JSON z danymi.</dd></div>
+            <div><dt><span class="badge badge-error">Błąd</span></dt><dd>Pliku nie udało się przetworzyć, np. skan wymaga OCR. Pozostałe pliki sprawy są dostępne.</dd></div>
+          </dl>
+          <button class="btn btn-primary" type="button" data-view="case">Wróć do sprawy</button>
+        </article>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

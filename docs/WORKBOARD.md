@@ -5,17 +5,17 @@ Główna ścieżka wykorzystuje jeden [system prompt](../prompts/system_pl.md) i
 | ID | Zadanie | Osoba | Priorytet | Status | Zależności | Kryterium akceptacji |
 | --- | --- | --- | --- | --- | --- | --- |
 | BE01 | CLI, schematy, prompt i adapter LLM | Backend | P0 | DONE | — | Test potwierdza jedno żądanie na PDF, walidację odpowiedzi i zapis w schemacie UZP. |
-| BE02 | Wspólny procesor i endpoint dla panelu | Backend | P0 | IN PROGRESS | BE01 | CLI i `POST /api/extract` współdzielą ekstrakcję i walidację. API zachowuje kolejność i obsługuje częściową awarię. Pozostaje próba z frontendem. |
-| BE03 | Próba Sonnet i weryfikacja docelowego LLM | Backend | P0 | IN PROGRESS | BE01, U06 | Sonnet odpowiedział na syntetyczny PDF oraz próbki UZP. Pozostaje weryfikacja konfiguracji konkursowej zgodnie z U06. |
-| BE04 | Ewaluacja i poprawki prompta | Backend | P0 | IN PROGRESS | BE03 | Zmierzono 12 spraw walidacyjnych i jeden syntetyczny negatyw, lokalny F1 0,9859; porównano modele na 9 PDF i dodano 5 syntetycznych regresji prompta. Pozostaje szerszy test negatywów i próba konkursowego modelu na zbiorze końcowym. |
-| BE05 | OCR na CPU | Backend | P0 | IN PROGRESS | BE01 | Skan UZP, dokument mieszany i całkowicie biała strona przeszły przez renderer w kontenerze. Pozostaje pomiar na szerszym zbiorze. |
-| BE06 | Uruchomienie i wydanie | Backend | P0 | IN PROGRESS | BE02, BE04, BE05 | Obraz zbudowano od podstaw, batch przetworzył skan i negatyw UZP. Pozostaje próba docelowego LLM i wspólny test z panelem. |
-| FE01 | Wybór wielu PDF-ów i lista wyników na atrapie | Frontend | P0 | TODO | Przykładowa odpowiedź | Panel pokazuje stan oczekiwania oraz `ok`, `unknown` i `error` per dokument. |
-| FE02 | Podgląd i pobranie JSON | Frontend | P0 | TODO | FE01 | Pobranie rozpoznanego pliku zachowuje nazwę i zawiera tylko jego `data`. |
-| FE03 | Integracja z API | Frontend | P0 | TODO | FE01, BE02 | Wysłanie kilku plików, obsługa błędu HTTP i częściowej awarii, ponowienie. |
-| FE04 | Test wspólny i demo | Frontend | P0 | TODO | FE02, FE03 | Scenariusz od wgrania rzeczywistych PDF-ów do pobrania wyników i krótka instrukcja panelu. |
-| FE05 | Pobranie wyników jako ZIP | Frontend | P1 | TODO | FE04 | Jedno pobranie wszystkich poprawnych wyników. |
+| BE02 | Wspólny procesor i endpoint dla panelu | Backend | P0 | DONE | BE01 | CLI i `POST /api/extract` współdzielą ekstrakcję oraz walidację; API zachowuje kolejność, częściowe awarie i aktywne typy. Test API, test przeglądarki i uruchomienie Compose przechodzą. |
+| BE03 | Próba Sonnet i weryfikacja docelowego LLM | Backend | P0 | IN PROGRESS | BE01, U06 | Ministral 3 8B/14B jest dostępny w UE; licencje kart modeli to Apache 2.0. Techniczny smoke 8B przeszedł. Pełne porównanie 220 plików przerwano po HTTP 429; nie ma wyboru modelu na podstawie F1. |
+| BE04 | Ewaluacja i poprawki prompta | Backend | P0 | IN PROGRESS | BE03 | Zmierzono 12 spraw walidacyjnych i syntetyczny negatyw, lokalny F1 0,9859; porównano historyczne modele na małych próbkach, dodano regresje prompta i manifest 30 skanów. Pełne porównanie konkursowe i test 55–60 pozostają do wykonania. |
+| BE05 | OCR na CPU | Backend | P0 | IN PROGRESS | BE01 | Pomiar 30 skanów UZP daje odczyt 238/266 pól; obsłużono adaptacyjne progowanie i dodano ponowny OCR wycinka rachunku z kontrolą NRB. Dalsza ocena wycinka na skanach jest opisana w `docs/SKANY.md`. |
+| BE06 | Uruchomienie i wydanie | Backend | P0 | DONE | BE02, BE04, BE05 | Czysta kopia zbudowała obraz i uruchomiła API z montowaną konfiguracją klas. Wspólny start, panel i API opisano w README oraz `docs/DEMO.md`; wynik benchmarku modelu pozostaje osobnym blokerem BE03/BE04. |
+| FE01 | Wybór wielu PDF-ów i lista wyników na atrapie | Frontend | P0 | DONE | Przykładowa odpowiedź | Testy i próba w przeglądarce potwierdzają statusy `ok`, `unknown` i `error` dla wielu plików. |
+| FE02 | Podgląd i pobranie JSON | Frontend | P0 | DONE | FE01 | Widok JSON i pobranie danych dokumentu są sprawdzone; formularze są wyświetlane obok podglądu PDF. |
+| FE03 | Integracja z API | Frontend | P0 | DONE | FE01, BE02 | Wysłanie wielu plików, błędy HTTP, częściowa awaria i obsługa anulowania mają testy; API zweryfikowano w przeglądarce. |
+| FE04 | Test wspólny i demo | Frontend | P0 | DONE | FE02, FE03 | Przygotowano scenariusz pokazu i zrzuty; interfejs zintegrowano z API i sprawdzono na PDF-ach syntetycznych. |
+| FE05 | Pobranie wyników jako ZIP | Frontend | P1 | DONE | FE04 | ZIP zachowuje nazwy, ścieżki sprawy i pusty wynik dla dokumentu `unknown`; potwierdzone testami. |
 
-U01–U07 są śledzone w [pytaniach do mentora](OPEN_QUESTIONS.md). Zadanie zależne od nieuzyskanej decyzji przechodzi w `BLOCKED` z opisem warunku wznowienia.
+U01–U08 są śledzone w [pytaniach do mentora](OPEN_QUESTIONS.md). Zadanie zależne od nieuzyskanej decyzji przechodzi w `BLOCKED` z opisem warunku wznowienia.
 
 Szczegółowe kroki i testy BE01–BE06 są w [instrukcji dla agenta backendu](prompts/BACKEND.md).

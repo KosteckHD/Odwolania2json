@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from fastapi import FastAPI, File, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from .contracts import DocumentError
@@ -15,6 +16,7 @@ from .schema_registry import load_configs
 
 
 ROOT = Path(__file__).resolve().parents[2]
+FRONTEND = ROOT / "frontend"
 ERROR_MESSAGES = {
     "pdf_read": "Nie udało się odczytać pliku PDF.",
     "pdf_encrypted": "Plik PDF wymaga hasła.",
@@ -29,14 +31,30 @@ ERROR_MESSAGES = {
 }
 
 
-def create_app(processor=None):
+def schema_fields(schema, prefix=""):
+    """Return leaf paths such as `Odwolujacy[].krs` for the configuration panel."""
+    if schema.get("type") == "array" or "items" in schema:
+        return schema_fields(schema.get("items", {}), prefix + "[]")
+    properties = schema.get("properties")
+    if not properties:
+        return [prefix] if prefix else []
+    return [path for key, value in properties.items()
+            for path in schema_fields(value, f"{prefix}.{key}" if prefix else key)]
+
+
+def create_app(processor=None, frontend_dir=FRONTEND):
     app = FastAPI()
     if processor is None:
         load_dotenv(ROOT / ".env", override=False)
-        configs = load_configs(ROOT / "configs/documents", ROOT / "schemas")
+        configs_dir = Path(os.getenv("KIO_CONFIGS_DIR", str(ROOT / "configs/documents")))
+        schemas_dir = Path(os.getenv("KIO_SCHEMAS_DIR", str(ROOT / "schemas")))
+        prompt_path = Path(os.getenv("KIO_PROMPT_PATH", str(ROOT / "prompts/system_pl.md")))
+        configs = load_configs(configs_dir, schemas_dir)
         llm_configured = any(os.getenv(name) for name in ("LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY", "API_KEY"))
         client = client_from_environment() if llm_configured else None
-        processor = DocumentProcessor(configs, ROOT / "prompts/system_pl.md", client)
+        processor = DocumentProcessor(configs, prompt_path, client)
+    llm = getattr(getattr(processor, "prompted", None), "client", None)
+    model = getattr(llm, "model", None)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, exc):
@@ -64,6 +82,17 @@ def create_app(processor=None):
                 finally:
                     file.file.close()
                     path.unlink(missing_ok=True)
-        return {"documents": documents}
+        return {"documents": documents, "meta": {"model": model}}
+
+    @app.get("/api/document-types")
+    def document_types():
+        configs = getattr(processor, "configs", {})
+        return {"types": [{"doc_type": key,
+                           "label": getattr(config, "options", {}).get("label"),
+                           "fields": schema_fields(config.schema)}
+                          for key, config in configs.items()]}
+
+    if frontend_dir and Path(frontend_dir).is_dir():
+        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
     return app

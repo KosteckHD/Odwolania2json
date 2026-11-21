@@ -4,24 +4,34 @@ services:
     volumes:
       - ./input:/app/input:ro
       - ./output:/app/output
+      - ${KIO_CONFIGS_HOST_DIR:-./configs/documents}:/app/configs/documents:ro
+      - ${KIO_SCHEMAS_HOST_DIR:-./schemas}:/app/schemas:ro
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-chat}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-${API_KEY:-}}
+      LLM_API_KEY: ${LLM_API_KEY:-${MISTRA_API_KEY:-${API_KEY:-}}}
       LLM_REQUEST_INTERVAL_SECONDS: ${LLM_REQUEST_INTERVAL_SECONDS:-1}
       LLM_MAX_429_RETRIES: ${LLM_MAX_429_RETRIES:-4}
       LLM_MAX_RETRY_WAIT_SECONDS: ${LLM_MAX_RETRY_WAIT_SECONDS:-60}
+      KIO_CONFIGS_DIR: /app/configs/documents
+      KIO_SCHEMAS_DIR: /app/schemas
   api:
     build: .
     command: ["python", "-m", "uvicorn", "--app-dir", "src", "kio_extract.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "127.0.0.1:8000:8000"
+    volumes:
+      - ${KIO_CONFIGS_HOST_DIR:-./configs/documents}:/app/configs/documents:ro
+      - ${KIO_SCHEMAS_HOST_DIR:-./schemas}:/app/schemas:ro
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-chat}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-${API_KEY:-}}
+      LLM_API_KEY: ${LLM_API_KEY:-${MISTRA_API_KEY:-${API_KEY:-}}}
       LLM_REQUEST_INTERVAL_SECONDS: ${LLM_REQUEST_INTERVAL_SECONDS:-1}
       LLM_MAX_429_RETRIES: ${LLM_MAX_429_RETRIES:-4}
       LLM_MAX_RETRY_WAIT_SECONDS: ${LLM_MAX_RETRY_WAIT_SECONDS:-60}
+      KIO_CONFIGS_DIR: ${KIO_CONFIGS_DIR:-/app/configs/documents}
+      KIO_SCHEMAS_DIR: ${KIO_SCHEMAS_DIR:-/app/schemas}
+      KIO_PROMPT_PATH: ${KIO_PROMPT_PATH:-/app/prompts/system_pl.md}

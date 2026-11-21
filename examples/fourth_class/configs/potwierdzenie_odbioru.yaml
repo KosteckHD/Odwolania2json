@@ -1,0 +1,18 @@
+# Typ dokumentu: Potwierdzenie odbioru
+# Przygotowano w kreatorze panelu Odwołania2JSON.
+id: potwierdzenie_odbioru
+schema: potwierdzenie_odbioru.schema.json
+classification:
+  positive_patterns:
+    - '(?i)Potwierdzenie\s+odbioru'
+  minimum_matches: 1
+fields:
+  numer:
+    pattern: '(?im)Numer\s+potwierdzenia\s*[:.]?\s*(?P<value>\S[^\r\n]*?)[ \t\r]*$'
+    normalize: text
+  data_odbioru:
+    pattern: '(?im)Data\s+odbioru\s*[:.]?\s*(?P<value>[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4})'
+    normalize: iso_date
+options:
+  label: "Potwierdzenie odbioru"
+  llm_instructions: "Potwierdzenie odbioru dokumentów z nagłówkiem POTWIERDZENIE ODBIORU. Pole numer to numer potwierdzenia, pole data_odbioru to data odbioru. Pole podpisane: true, jeśli pod potwierdzeniem jest podpis."

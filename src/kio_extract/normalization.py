@@ -16,12 +16,23 @@ def normalize_digits(value: str) -> str | None:
 
 
 def normalize_polish_bank_account(value: str) -> str:
-    compact = "".join(value.split()).upper()
+    compact = "".join(value.split()).replace("\u200b", "").replace("\ufeff", "").upper()
     if re.fullmatch(r"PL[0-9]{26}", compact):
         return compact[2:]
     if re.fullmatch(r"[0-9]{26}", compact):
         return compact
     return value
+
+
+def has_valid_polish_bank_checksum(value: str) -> bool:
+    """Check the NRB/IBAN control digits using the NBP MOD-97 procedure."""
+    compact = "".join(value.split()).replace("\u200b", "").replace("\ufeff", "").upper()
+    if compact.startswith("PL"):
+        compact = compact[2:]
+    if not re.fullmatch(r"[0-9]{26}", compact):
+        return False
+    rearranged = compact[2:] + "2521" + compact[:2]
+    return int(rearranged) % 97 == 1
 
 
 def normalize_ted(value: str) -> str:

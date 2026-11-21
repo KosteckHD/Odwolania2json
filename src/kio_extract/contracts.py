@@ -21,6 +21,7 @@ class ExtractedDocument:
     pages: tuple[PageText, ...]
     used_ocr: bool = False
     pages_needing_ocr: tuple[int, ...] = ()
+    ocr_pages: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

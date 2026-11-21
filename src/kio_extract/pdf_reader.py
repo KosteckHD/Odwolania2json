@@ -24,6 +24,7 @@ def extract_pdf(path: Path, ocr: OCR | None = None) -> ExtractedDocument:
         raise DocumentError("pdf_read", "PDF nie zawiera stron")
 
     pending = []
+    ocr_pages = []
     used_ocr = False
     for index, page in enumerate(pages):
         if _has_text(page.text):
@@ -35,7 +36,8 @@ def extract_pdf(path: Path, ocr: OCR | None = None) -> ExtractedDocument:
             if _has_text(recovered):
                 pages[index] = PageText(page.page_number, recovered)
                 used_ocr = True
+                ocr_pages.append(page.page_number)
                 continue
         pending.append(page.page_number)
 
-    return ExtractedDocument(path, tuple(pages), used_ocr, tuple(pending))
+    return ExtractedDocument(path, tuple(pages), used_ocr, tuple(pending), tuple(ocr_pages))
