@@ -14,6 +14,8 @@ Odpowiedź HTTP 200 ma postać obiektu `{"documents":[...]}`. `filename` to nazw
 
 Błąd pojedynczego PDF-u pozostaje w `documents` z `status: "error"`. Puste lub niepoprawne żądanie zwraca HTTP 400 i `{"error":{"code":"invalid_request","message":"Wybierz co najmniej jeden plik PDF."}}`. Awaria całego żądania zwraca kod 5xx. Sekret LLM jest po stronie backendu. Pełną [syntetyczną odpowiedź](fixtures/extract-response.json) można od razu użyć w atrapie klienta.
 
+Odpowiedź zawiera też `meta.model`, czyli nazwę modelu LLM albo `null` w trybie regułowym. `GET /api/document-types` zwraca `{"types":[{"doc_type":"przelew","fields":["przelew_bankowy.kwota", ...]}]}` z klas w `configs/documents/`; pola list mają w ścieżce `[]`. Ten sam serwer pod `/` serwuje panel z katalogu `frontend/`.
+
 ## Wewnętrzne kontrakty backendu
 
 ```text

@@ -16,6 +16,16 @@ py -3.13 -m venv .venv
 
 Na Linuksie używaj `python3.13 -m venv .venv` i `.venv/bin/python`. Umieść np. `pismo.pdf` pod `input/case1/`. Wynik pojawi się w `output/case1/pismo.json`. Argumenty `--input` i `--output` wybierają inne katalogi. `--negative-output empty_object` zmienia domyślny wynik o długości 0 bajtów na `{}`. CLI zgłasza strony wymagające OCR i przechodzi do następnego pliku. Uruchomienie na świeżym `output/` ułatwia oddzielenie bieżących wyników od poprzednich przebiegów.
 
+## Panel WWW
+
+Panel do przetwarzania spraw w przeglądarce jest serwowany przez to samo API, pod jednym adresem. Po jednorazowej instalacji `.venv` (sekcja „Uruchomienie”) uruchom w katalogu repozytorium:
+
+```powershell
+.\start.bat
+```
+
+Skrypt startuje serwer na http://127.0.0.1:8000/ i otwiera tam przeglądarkę. Ctrl+C zatrzymuje serwer. Inny port ustawia zmienna `PORT`, a `NO_BROWSER=1` wyłącza otwieranie przeglądarki. Na Linuksie i macOS służy do tego `./start.sh`. Gdy `.env` zawiera konfigurację modelu, API korzysta z LLM, a panel pokazuje nazwę modelu przy wyniku. Bez niej działa tryb regułowy. Ten sam serwer wystawia `docker compose up --build api`. Opis panelu jest w [frontend/README.md](frontend/README.md).
+
 ## Tryb LLM
 
 Ustaw `LLM_BASE_URL` na bazę zgodnego API Chat Completions, np. adres zakończony `/v1`, `LLM_MODEL` na nazwę obsługiwaną przez ten endpoint i `LLM_API_KEY` w środowisku procesu lub w lokalnym `.env`. Obsługiwana jest także nazwa `API_KEY`. Zmienne procesu mają pierwszeństwo przed `.env`. Endpoint Chat Completions musi obsługiwać `response_format: json_object`. Wywołanie `--llm` przesyła tekst stron PDF do skonfigurowanego API. Do danych konkursowych wybierz otwarty model i zweryfikuj, że firma oraz serwery API są w UE/EOG. [Wymagania UZP](https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026#6-spos%C3%B3b-testowania-i-walidacji)
