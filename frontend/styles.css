@@ -27,6 +27,7 @@
   --form-soft: #A65741;   /* numery pól, podpowiedzi: 4.6:1 na papierze */
   --rule: #E6B4A3;        /* linie rubryk i kratek */
   --rule-soft: #F2D9CF;
+  --rule-field: #C77C64;  /* obramowanie rubryk i kratek: 3.2:1 na bieli (WCAG 1.4.11) */
   --brand: #8C2A15;       /* menu i główne akcje: biel 8.2:1 */
   --brand-hover: #74220F;
   --ink: #1B1C20;
@@ -235,7 +236,7 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 /* zwykła rubryka do wpisywania */
 .box-in {
   display: block; width: 100%; min-height: var(--ch); padding: 4px 8px;
-  border: 1px solid var(--rule); background: var(--sheet); color: var(--ink);
+  border: 1px solid var(--rule-field); background: var(--sheet); color: var(--ink);
   font: 500 15px/1.35 var(--font); font-variant-numeric: tabular-nums; resize: none; overflow: hidden;
   font-size: 15.5px;
 }
@@ -251,7 +252,7 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .cells-sm .cells-row { flex-wrap: wrap; row-gap: 4px; }
 .cells-row i {
   display: grid; place-items: center; width: var(--cw); height: var(--ch);
-  margin-left: -1px; border: 1px solid var(--rule); background: var(--sheet);
+  margin-left: -1px; border: 1px solid var(--rule-field); background: var(--sheet);
   font-style: normal; font-size: 16px; font-weight: 500; color: var(--ink);
 }
 .cells-row i:first-child, .cells-row .cells-gap + i { margin-left: 0; }
