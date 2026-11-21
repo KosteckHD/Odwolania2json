@@ -544,3 +544,6 @@ select.wiz-in { cursor: pointer; padding-right: 4px; }
 /* stałe miejsce na pasek przewijania: bez tego strona dopasowana do szerokości
    włączała i wyłączała pasek, a podgląd przerysowywał się w kółko */
 .pdfv-stage { scrollbar-gutter: stable; }
+
+/* podpowiedź przy etykiecie rubryki, np. „w mianowniku” */
+.field-hint { color: var(--ink-soft); font-weight: 400; }

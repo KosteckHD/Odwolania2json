@@ -528,7 +528,7 @@ function renderSummary() {
   el.downloadAllLabel.textContent = `Pobierz wyniki (ZIP, ${files.length} ${plural(files.length, "plik", "pliki", "plików")})`;
 }
 
-/** Pliki wynikowe jak w output/<sprawa>/: JSON dla rozpoznanych, pusty .json dla nierozpoznanych. */
+/** Pliki wynikowe jak w output/<sprawa>/: JSON dla rozpoznanych, `{}` dla nierozpoznanych (wymóg UZP). */
 function resultFiles() {
   if (!state.results) return [];
   const folder = safeName(state.caseName ?? "sprawa");
@@ -539,7 +539,7 @@ function resultFiles() {
     let name = jsonName(state.files[i].name);
     for (let k = 2; used.has(name); k++) name = jsonName(state.files[i].name).replace(/\.json$/, ` (${k}).json`);
     used.add(name);
-    files.push({ name: `${folder}/${name}`, text: r.status === "ok" ? `${JSON.stringify(dataAt(i), null, 2)}\n` : "" });
+    files.push({ name: `${folder}/${name}`, text: r.status === "ok" ? `${JSON.stringify(dataAt(i), null, 2)}\n` : "{}" });
   });
   return files;
 }
@@ -581,7 +581,7 @@ function renderSheet() {
       ["Dodaj pozostałe dokumenty sprawy i kliknij „Przetwórz”. Dane tego pliku pojawią się w tym miejscu."]);
   } else if (entry.status === "unknown") {
     left = stateBlock("Nie rozpoznano typu dokumentu", [
-      "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie pusty plik JSON, zgodnie z formatem UZP.",
+      "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie plik JSON z samym {}, zgodnie z wymogiem UZP.",
       "Jeśli to jednak jeden z tych dokumentów, sprawdź w podglądzie, czy PDF jest kompletny i czytelny.",
     ]);
   } else if (entry.status === "error") {
@@ -820,6 +820,7 @@ function fieldBlock(field, value, ctx, path) {
   if (choice) label.id = `${id}-label`;
   else label.htmlFor = id;
   label.append(node("span", "field-no", `${ctx.n}.`), " ", field.label);
+  if (field.hint) label.append(node("span", "field-hint", ` (${field.hint})`));
   // dopiski i przycisk „cofnij” obok etykiety, nie w niej (opis rubryki przez aria-describedby)
   const tags = node("span", "field-tags");
   head.append(label, tags);
