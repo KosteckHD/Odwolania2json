@@ -34,3 +34,20 @@ Przegląd wyjść względem wzorców (tylko `development`):
 | A1-e1-pelnomocnik | definicje `pelnomocnik.imie_nazwisko/nazwa/mail` + syntetyczny przykład; zakaz „danych kancelarii” zawężony do nazwy i identyfikatorów odwołującego | 0,9285 — **NIEWAŻNY** (14× `llm_http` 504, brak 14 plików) | — | — | — | powtórzony jako r2. Na 121 wspólnych dokumentach: baseline 0,9822 → E1 0,9951; `pelnomocnik.nazwa` FN 21→0, `mail` FN 10→0 |
 | A1-e1-pelnomocnik-r2 | to samo co E1, po cherry-picku ponawiania 5xx (aa76b7f) | **0,9950** (TP 1388, FP 6, FN 8) | 0,995 | 0,997 | 0,992 | **zostaje** (w `system_pl.md`): +0,0146 ponad szum; `pelnomocnik.nazwa` FN 24→0, `mail` FN 13→0, żadna klasa nie spadła. Zostały: numer_transakcji FN 4, czynność 2 dok., prowadzący FP 2, imiona FP 2 |
 | Ed1-e2-pola | na E1: (a) imiona już w mianowniku przepisywać litera w literę (bez zmiany rodzaju, końcówki, polskich znaków; przykłady syntetyczne); (b) zaskarżona czynność = zdanie „Zamawiający w dniu … odrzucił/nie wykluczył/…”, zarzuty tylko tłem + drzewo decyzji czasownik → `czynnosc_powod_id`; (c) `prowadzacy_postepowanie` = `null` przy jednym zamawiającym; (d) `numer_transakcji` z etykiet „Nr ref.”, „Numer referencyjny”… także gdy powtarza się w tytule | **1,0000** (TP 1400, FP 0, FN 0) | 1,000 | 1,000 | 1,000 | **zostaje** (w `system_pl.md`). Wszystkie 14 pozostałych błędów usunięte, nic nie spadło. Uwaga: 1,0 na development to górna granica — reguły są ogólne (etykiety, czasowniki), ale prawdziwą miarą będzie validation/test |
+| Ed1-e3-yaml | treść E2 bez zmian, ale sekcje „Odwołanie / Pełnomocnictwo / Potwierdzenie przelewu” przeniesione z promptu do `options.llm_instructions` w YAML klas (prompt: tylko reguły wspólne + odesłanie do `llm_instructions`) | 1,0000 (TP 1400, FP 0, FN 0) | 1,000 | 1,000 | 1,000 | **cofnięte z głównej wersji** (brak wzrostu — reguła „tylko gdy F1 rośnie”), zachowane jako wariant `prompts/experiments/a1-e3-yaml.md` + `prompts/experiments/a1-e3-configs/`. Wniosek: reguły klasy w YAML działają tak samo dobrze jak w prompcie, więc nowy typ dokumentu może dostać pełne reguły samą konfiguracją |
+
+## Czego nie sprawdziłem i dlaczego
+
+Limit dostawcy (koordynator: 1 zapytanie naraz, 4–6 s odstępu) wydłużył przebieg do ok. 30–36 min, więc z listy pomysłów
+zrobiłem tylko te z największym zyskiem. Po E2 zbiór development ma F1 = 1,0, więc dalsze warianty (prompt po angielsku,
+krótszy prompt) nie mogłyby pokazać poprawy na tym zbiorze — tylko ewentualny spadek; bez validation nie da się ocenić
+ich wpływu na uogólnianie. Pomysł 4 (drzewo decyzji dla `czynnosc_powod_id`) jest częścią E2.
+
+## Przebiegi nieważne / incydenty
+
+- Pierwszy `A1-baseline` (concurrency 3) przerwany na prośbę koordynatora (limit). Uwaga: osierocony proces `main.py`
+  dokończył go w tle i pisał do tego samego katalogu wyjścia; ważny `A1-baseline` (concurrency 1) nadpisał wszystkie 135 plików, bez błędów.
+- Wspólny katalog scratchpad agentów: inny agent nadpisał mój skrypt uruchomieniowy, przez co jedna próba „A1-baseline”
+  wystartowała w worktree A2 i padła na ewaluacji (bez wpływu na wyniki; od tej pory skrypty w osobnym podkatalogu).
+- `A1-e1-pelnomocnik`: 14× `llm_http` (504) → nieważny, powtórzony jako `-r2` po cherry-picku aa76b7f.
+- `Ed1-e2-pola` pierwsze podejście (concurrency 2) przerwane przed końcem, żeby wziąć ponawianie 5xx; liczy się pełny przebieg.
