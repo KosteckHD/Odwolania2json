@@ -126,12 +126,18 @@
                 <input id="folder-input" class="file-input" type="file" webkitdirectory multiple>
               </div>
 
-              <p id="request-message" class="alert" role="alert" hidden></p>
+              <div id="request-message" class="alert" role="alert" hidden>
+                <p id="request-text"></p>
+                <button id="retry-request" class="btn btn-line" type="button" hidden>Spróbuj ponownie</button>
+              </div>
 
               <div class="actions" id="actions" hidden>
+                <button id="retry-failed" class="btn btn-primary" type="button" hidden>Ponów błędne</button>
                 <button id="submit-btn" class="btn btn-primary" type="submit">Przetwórz pliki</button>
+                <button id="cancel-btn" class="btn btn-line btn-block" type="button" hidden>Anuluj</button>
                 <p class="actions-note" id="actions-note" aria-live="polite"></p>
               </div>
+              <p id="announcer" class="sr-only" role="status"></p>
 
               <ol id="file-list" class="file-list" aria-label="Wybrane pliki"></ol>
             </form>
@@ -146,7 +152,7 @@
             </section>
           </section>
 
-          <section class="sheet" id="sheet" aria-labelledby="sheet-heading" aria-live="polite">
+          <section class="sheet" id="sheet" aria-labelledby="sheet-heading">
             <!-- treść arkusza renderuje app.js -->
           </section>
         </div>

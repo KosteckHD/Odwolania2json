@@ -32,9 +32,13 @@ export function createPdfViewer(file, url, title) {
       <button type="button" class="pdfv-btn pdfv-full" data-act="full" aria-pressed="false" aria-label="Powiększ podgląd na cały obszar" title="Powiększ podgląd na cały obszar">⤢</button>
     </div>
     <p class="pdfv-status">Wczytywanie podglądu…</p>
+    <p class="sr-only pdfv-live" aria-live="polite"></p>
     <div class="pdfv-stage" tabindex="0"></div>`;
   const stage = element.querySelector(".pdfv-stage");
-  stage.setAttribute("aria-label", title);
+  stage.setAttribute("role", "region");
+  stage.setAttribute("aria-label", `${title}. Strzałki w górę i w dół wybierają wiersz tekstu, `
+    + "Enter wstawia go do wybranej rubryki, Escape wraca do rubryki, Page Up i Page Down zmieniają stronę.");
+  const live = element.querySelector(".pdfv-live");
   const status = element.querySelector(".pdfv-status");
   const pageNo = element.querySelector(".pdfv-page-no");
   const view = { doc: null, lib: null, page: 1, zoom: 1, rendering: null, hasText: true };
@@ -88,10 +92,91 @@ export function createPdfViewer(file, url, title) {
     zoomLabel.textContent = ZOOM_LABELS[view.zoom];
     stage.dataset.zoomed = String(view.zoom > 0);
     status.dataset.kind = chars > 0 ? "text" : "scan";
-    status.textContent = chars > 0
-      ? "Zaznacz w dokumencie tekst, żeby wstawić go do wybranej rubryki."
-      : "Ta strona to skan bez warstwy tekstu: wartości trzeba wpisać ręcznie.";
+    pick.lines = null;          // nowa strona albo skala: wiersze liczymy od nowa
+    pick.cursor = pick.anchor = -1;
+    showHint();
   };
+
+  /* ---------- wybór wiersza z klawiatury (odpowiednik zaznaczania myszą) ---------- */
+
+  const pick = { lines: null, cursor: -1, anchor: -1 };
+  const hasText = () => status.dataset.kind === "text";
+
+  /** Wiersze strony z warstwy tekstu: fragmenty o tej samej wysokości, od lewej do prawej. */
+  const collectLines = () => {
+    const items = [...stage.querySelectorAll(".textLayer span")]
+      .filter((s) => !s.querySelector("span") && s.textContent.trim())
+      .map((s) => ({ s, r: s.getBoundingClientRect() }))
+      .sort((a, b) => a.r.top - b.r.top || a.r.left - b.r.left);
+    const lines = [];
+    for (const it of items) {
+      const line = lines.at(-1);
+      if (line && Math.abs(it.r.top - line.top) < Math.max(3, it.r.height / 2)) line.items.push(it);
+      else lines.push({ top: it.r.top, items: [it] });
+    }
+    return lines.map(({ items: row }) => {
+      row.sort((a, b) => a.r.left - b.r.left);
+      let text = "";
+      row.forEach((it, i) => { text += (i && it.r.left - row[i - 1].r.right > 1 ? " " : "") + it.s.textContent; });
+      return { spans: row.map((it) => it.s), text: text.replace(/\s+/g, " ").trim() };
+    });
+  };
+
+  const range = () => {
+    if (pick.cursor < 0 || !pick.lines) return [];
+    const [a, b] = [Math.min(pick.anchor, pick.cursor), Math.max(pick.anchor, pick.cursor)];
+    return pick.lines.slice(a, b + 1);
+  };
+  const paintPick = (on = true) => {
+    stage.querySelectorAll(".is-picked").forEach((s) => s.classList.remove("is-picked"));
+    if (!on) return;
+    range().forEach((line) => line.spans.forEach((s) => s.classList.add("is-picked")));
+    pick.lines?.[pick.cursor]?.spans[0]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  };
+  const say = (text) => { live.textContent = ""; setTimeout(() => { live.textContent = text; }, 30); };
+
+  /** Podpowiedź w pasku stanu: inna, gdy podgląd ma fokus z klawiatury. */
+  function showHint() {
+    if (!hasText()) {
+      status.textContent = "Ta strona to skan bez warstwy tekstu: wartości trzeba wpisać ręcznie.";
+      return;
+    }
+    const target = element.dataset.target;
+    status.textContent = document.activeElement === stage
+      ? `↑/↓: wiersz · Shift+↑/↓: kilka wierszy · Enter: wstaw ${target ? `do „${target}”` : "do wybranej rubryki"} · Esc: wróć do rubryki`
+      : "Zaznacz w dokumencie tekst, żeby wstawić go do wybranej rubryki.";
+  }
+  stage.addEventListener("focus", () => { showHint(); paintPick(); });
+  // przejście do innego okna też wywołuje blur: wybór znika dopiero, gdy fokus naprawdę opuści podgląd
+  stage.addEventListener("blur", () => setTimeout(() => {
+    if (document.activeElement !== stage) { showHint(); paintPick(false); }
+  }));
+
+  stage.addEventListener("keydown", (event) => {
+    if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.altKey) {
+      event.preventDefault();
+      if (!hasText()) { say("Na tej stronie nie ma tekstu do wybrania."); return; }
+      pick.lines ??= collectLines();
+      const n = pick.lines.length;
+      if (!n) return;
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      pick.cursor = pick.cursor < 0 ? (step > 0 ? 0 : n - 1) : Math.min(n - 1, Math.max(0, pick.cursor + step));
+      if (!event.shiftKey || pick.anchor < 0) pick.anchor = pick.cursor;
+      paintPick();
+      const lines = range();
+      say(lines.length > 1
+        ? `Wybrano ${lines.length} ${lines.length % 10 >= 2 && lines.length % 10 <= 4 && (lines.length % 100 < 12 || lines.length % 100 > 14) ? "wiersze" : "wierszy"}: ${lines.map((l) => l.text).join(" ")}`
+        : `Wiersz ${pick.cursor + 1} z ${n}: ${lines[0].text}`);
+    } else if (event.key === "Enter") {
+      const text = range().map((l) => l.text).join(" ");
+      if (!text) return;
+      event.preventDefault();
+      element.dispatchEvent(new CustomEvent("pdf-pick", { bubbles: true, detail: text }));
+    } else if (event.key === "Escape" || (event.altKey && event.key === "ArrowUp")) {
+      event.preventDefault();
+      element.dispatchEvent(new CustomEvent("pdf-back", { bubbles: true }));
+    }
+  });
 
   element.addEventListener("click", (event) => {
     const act = event.target.closest?.("[data-act]")?.dataset.act;
