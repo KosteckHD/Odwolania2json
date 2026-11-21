@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["przelew_bankowy"],
+  "properties": {
+    "przelew_bankowy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_operacji", "kwota", "na_rachunek", "numer_transakcji", "tytul", "z_rachunku"],
+      "properties": {
+        "data_operacji": {"type": ["string", "null"], "format": "date"},
+        "kwota": {"type": ["number", "null"]},
+        "na_rachunek": {"type": ["string", "null"]},
+        "numer_transakcji": {"type": ["string", "null"]},
+        "tytul": {"type": ["string", "null"]},
+        "z_rachunku": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
