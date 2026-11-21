@@ -32,6 +32,13 @@
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M6 12h12M12 6v12"/></symbol>
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5l-6 6M4.5 19.5l6-6"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/></symbol>
+    <symbol id="i-ok" viewBox="0 0 24 24"><path d="M5.5 12.5l4 4 9-9"/></symbol>
+    <symbol id="i-unknown" viewBox="0 0 24 24"><path d="M9.2 9.2a2.9 2.9 0 1 1 3.9 2.7c-.7.3-1.1.9-1.1 1.6v.9"/><circle cx="12" cy="18" r=".6"/></symbol>
+    <symbol id="i-error" viewBox="0 0 24 24"><path d="M12 5.5v9"/><circle cx="12" cy="18.5" r=".6"/></symbol>
+    <symbol id="i-pending" viewBox="0 0 24 24"><path d="M12 4.5a7.5 7.5 0 1 1-7.5 7.5"/></symbol>
+    <symbol id="i-wait" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 8.5V12l2.5 1.5"/></symbol>
     <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4"/><path d="M9 12h6M9 15.5h6"/></symbol>
   </svg>
 
@@ -108,40 +115,53 @@
           <li data-step="3"><span class="step-no">3</span><span class="step-label">Sprawdź i pobierz</span></li>
         </ol>
         <span class="mode-flag" id="mode-flag" hidden>Dane przykładowe</span>
+        <!-- jedyne miejsce pobierania: główny klik = ZIP sprawy, rozwinięcie = JSON wybranego dokumentu -->
+        <div class="split pop-anchor" id="download-split" hidden>
+          <button class="btn split-main" id="download-zip" type="button">
+            <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg><span id="download-zip-label">Pobierz</span>
+          </button>
+          <button class="btn split-more" id="download-more" type="button" aria-expanded="false" aria-controls="download-menu">
+            <svg class="ic" aria-hidden="true"><use href="#i-chevron"/></svg><span class="sr-only">Więcej opcji pobierania</span>
+          </button>
+          <div class="pop pop-right" id="download-menu" hidden>
+            <button class="pop-item" id="download-zip-item" type="button">
+              <span class="pop-item-title">ZIP całej sprawy</span><span class="pop-item-note" id="download-zip-note"></span>
+            </button>
+            <button class="pop-item" id="download-json" type="button">
+              <span class="pop-item-title">JSON tego dokumentu</span><span class="pop-item-note" id="download-json-note"></span>
+            </button>
+            <p class="pop-note" id="unsaved-note" hidden></p>
+          </div>
+        </div>
       </header>
 
       <main id="main" tabindex="-1">
-        <!-- Widok: sprawa -->
-        <div class="view-case" id="view-case">
-          <section class="docs" id="docs" aria-labelledby="docs-heading">
-            <div class="docs-head">
-              <h2 class="sec" id="docs-heading">Dokumenty sprawy</h2>
-              <button class="docs-toggle" id="docs-toggle" type="button" aria-expanded="true" aria-controls="docs-body" title="Zwiń listę dokumentów">
-                <svg class="ic" aria-hidden="true"><use href="#i-collapse"/></svg>
-                <span class="sr-only" id="docs-toggle-label">Zwiń listę dokumentów</span>
-              </button>
-            </div>
-            <ol class="docs-mini" id="docs-mini" aria-label="Dokumenty sprawy (lista zwinięta)" hidden></ol>
+        <!-- Widok: sprawa. Ekran 1 (wgrywanie i przetwarzanie) albo ekran 2 (wynik). -->
+        <div class="view-case" id="view-case" data-screen="intake">
+          <!-- pola plików poza ekranami: przyciski z obu ekranów (label for) zawsze je otwierają -->
+          <input id="file-input" class="file-input" name="files" type="file" accept="application/pdf,.pdf" multiple>
+          <input id="folder-input" class="file-input" type="file" webkitdirectory multiple>
+          <p id="announcer" class="sr-only" role="status"></p>
 
-            <div class="docs-body" id="docs-body">
+          <div id="request-message" class="alert" role="alert" hidden>
+            <p id="request-text"></p>
+            <button id="retry-request" class="btn btn-line btn-sm" type="button" hidden>Spróbuj ponownie</button>
+          </div>
+
+          <!-- Ekran 1 -->
+          <section class="intake" id="intake" aria-labelledby="intake-heading">
+            <h2 class="intake-title" id="intake-heading">Dokumenty sprawy</h2>
+            <p class="intake-lead">Wgraj wszystkie PDF-y jednej sprawy. Panel rozpozna typ każdego pliku po treści i przygotuje JSON w formacie UZP.</p>
             <form id="upload-form" class="upload" novalidate>
               <div class="drop" id="drop">
-                <svg class="ic ic-lg" aria-hidden="true"><use href="#i-upload"/></svg>
-                <p class="drop-title">Przeciągnij tutaj pliki PDF</p>
-                <p class="drop-hint">wszystkie dokumenty jednej sprawy naraz</p>
+                <svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>
+                <p class="drop-title">Przeciągnij tu pliki PDF albo</p>
                 <div class="drop-buttons">
-                  <label class="btn btn-line" for="file-input" id="file-label">Wybierz pliki z dysku</label>
+                  <label class="btn btn-line" for="file-input" id="file-label">Wybierz pliki</label>
                   <label class="btn btn-line" for="folder-input" id="folder-label">
-                    <svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Folder sprawy
+                    <svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wybierz folder
                   </label>
                 </div>
-                <input id="file-input" class="file-input" name="files" type="file" accept="application/pdf,.pdf" multiple>
-                <input id="folder-input" class="file-input" type="file" webkitdirectory multiple>
-              </div>
-
-              <div id="request-message" class="alert" role="alert" hidden>
-                <p id="request-text"></p>
-                <button id="retry-request" class="btn btn-line" type="button" hidden>Spróbuj ponownie</button>
               </div>
 
               <section id="restore-box" class="restore" aria-labelledby="restore-title" hidden>
@@ -153,32 +173,62 @@
                 </div>
               </section>
 
+              <ol id="file-list" class="file-list" aria-label="Wybrane pliki"></ol>
+
               <div class="actions" id="actions" hidden>
-                <!-- po przetworzeniu główną akcją jest pobranie wyników; ponawianie schodzi do drugiego rzędu -->
-                <button class="btn btn-primary" id="download-all" type="button" hidden>
-                  <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
-                  <span id="download-all-label">Pobierz wyniki (ZIP)</span>
-                </button>
-                <p class="unsaved-note" id="unsaved-note" hidden></p>
-                <button id="retry-failed" class="btn btn-primary" type="button" hidden>Ponów błędne</button>
                 <button id="submit-btn" class="btn btn-primary" type="submit">Przetwórz pliki</button>
-                <button id="cancel-btn" class="btn btn-line btn-block" type="button" hidden>Anuluj</button>
+                <button id="cancel-btn" class="btn btn-line" type="button" hidden>Anuluj</button>
                 <p class="actions-note" id="actions-note" aria-live="polite"></p>
               </div>
-              <p id="announcer" class="sr-only" role="status"></p>
-
-              <ol id="file-list" class="file-list" aria-label="Wybrane pliki"></ol>
             </form>
-
-            <section class="summary" id="summary" aria-labelledby="summary-heading" hidden>
-              <h2 class="sec" id="summary-heading">Wynik sprawy</h2>
-              <dl class="tally" id="tally"></dl>
-            </section>
-            </div>
           </section>
 
-          <section class="sheet" id="sheet" aria-labelledby="sheet-heading">
-            <!-- treść arkusza renderuje app.js -->
+          <!-- Ekran 2 -->
+          <section class="result" id="result" hidden aria-label="Wynik sprawy">
+            <div class="docbar">
+              <div class="pop-anchor docbar-docs">
+                <button class="docbar-btn" id="docs-btn" type="button" aria-expanded="false" aria-controls="docs-panel">
+                  <span id="docs-btn-label">Dokumenty</span>
+                  <svg class="ic ic-sm" aria-hidden="true"><use href="#i-chevron"/></svg>
+                </button>
+                <div class="pop pop-docs" id="docs-panel" hidden>
+                  <ol class="doc-list" id="doc-list" aria-label="Dokumenty sprawy"></ol>
+                  <div class="pop-row">
+                    <button id="retry-failed" class="btn btn-line btn-sm" type="button" hidden>Ponów błędne</button>
+                    <button id="resubmit-btn" class="btn btn-line btn-sm" type="button">Przetwórz ponownie</button>
+                  </div>
+                  <dl class="tally" id="tally"></dl>
+                  <div class="pop-add">
+                    <span class="pop-add-title">Dodaj pliki</span>
+                    <div class="pop-add-buttons">
+                      <label class="btn btn-line btn-sm" for="file-input">Wybierz pliki</label>
+                      <label class="btn btn-line btn-sm" for="folder-input">Wybierz folder</label>
+                    </div>
+                    <p class="pop-note">Nowe pliki zaczynają nową sprawę, więc najpierw pobierz wyniki tej.</p>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-line btn-sm docbar-cancel" id="cancel-retry" type="button" hidden>Anuluj ponawianie</button>
+              <div class="docbar-nav">
+                <button class="icon-btn" id="doc-prev" type="button" aria-label="Poprzedni dokument"><svg class="ic" aria-hidden="true"><use href="#i-prev"/></svg></button>
+                <span class="docbar-pos" id="doc-pos"></span>
+                <button class="icon-btn" id="doc-next" type="button" aria-label="Następny dokument"><svg class="ic" aria-hidden="true"><use href="#i-next"/></svg></button>
+              </div>
+              <span class="docbar-progress" id="doc-progress"></span>
+              <div class="pop-anchor">
+                <button class="icon-btn" id="doc-options" type="button" aria-expanded="false" aria-controls="doc-options-menu" title="Opcje dokumentu">
+                  <svg class="ic" aria-hidden="true"><use href="#i-more"/></svg><span class="sr-only">Opcje dokumentu</span>
+                </button>
+                <div class="pop pop-right" id="doc-options-menu" hidden>
+                  <button class="pop-item" id="doc-retry" type="button"><span class="pop-item-title" id="doc-retry-label">Przetwórz ten plik ponownie</span><span class="pop-item-note" id="doc-retry-note"></span></button>
+                  <button class="pop-item" id="doc-pdf-toggle" type="button"><span class="pop-item-title" id="doc-pdf-label">Ukryj podgląd PDF</span></button>
+                </div>
+              </div>
+            </div>
+
+            <section class="sheet" id="sheet" aria-labelledby="sheet-heading">
+              <!-- treść arkusza renderuje app.js -->
+            </section>
           </section>
         </div>
 
@@ -213,14 +263,14 @@
             </li>
             <li>
               <h3>Sprawdź dane i pobierz JSON</h3>
-              <p>Kliknij plik na liście, żeby zobaczyć jego dane w rubrykach. Przycisk „Pobierz” zapisuje plik JSON gotowy dla systemów urzędu, a „Pobierz ZIP” w kolumnie dokumentów zapisuje wyniki całej sprawy.</p>
+              <p>Dokumenty przełączasz strzałkami ‹ › nad formularzem albo z listy „Dokumenty ▾”. Wpisuj wprost w rubryki; tekst zaznaczony w PDF-ie wstawisz przyciskiem „Wstaw do: …”. Przycisk „Pobierz” w górnym pasku zapisuje ZIP całej sprawy, a jego rozwinięcie ▾ JSON bieżącego dokumentu.</p>
             </li>
           </ol>
           <h3 class="help-sub">Co oznaczają statusy</h3>
           <dl class="help-status">
-            <div><dt><span class="badge badge-ok">Odwołanie</span></dt><dd>Typ rozpoznany, dane wyciągnięte i sprawdzone schematem UZP.</dd></div>
-            <div><dt><span class="badge badge-unknown">Nie rozpoznano</span></dt><dd>Dokument nie jest odwołaniem, pełnomocnictwem ani potwierdzeniem przelewu. Nie powstaje dla niego JSON z danymi.</dd></div>
-            <div><dt><span class="badge badge-error">Błąd</span></dt><dd>Pliku nie udało się przetworzyć, np. skan wymaga OCR. Pozostałe pliki sprawy są dostępne.</dd></div>
+            <div><dt><span class="badge badge-ok"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg>Odwołanie</span></dt><dd>Typ rozpoznany, dane wyciągnięte i sprawdzone schematem UZP.</dd></div>
+            <div><dt><span class="badge badge-unknown"><svg class="ic" aria-hidden="true"><use href="#i-unknown"/></svg>Nie rozpoznano</span></dt><dd>Dokument nie jest odwołaniem, pełnomocnictwem ani potwierdzeniem przelewu. W wynikach sprawy dostaje plik JSON z samym {}.</dd></div>
+            <div><dt><span class="badge badge-error"><svg class="ic" aria-hidden="true"><use href="#i-error"/></svg>Błąd</span></dt><dd>Pliku nie udało się przetworzyć, np. skan wymaga OCR. Pozostałe pliki sprawy są dostępne.</dd></div>
           </dl>
           <button class="btn btn-primary" type="button" data-view="case">Wróć do sprawy</button>
         </article>

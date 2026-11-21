@@ -88,11 +88,25 @@ Identyfikatory (NIP, KRS, REGON, PESEL), daty i numery rachunków są wpisane w 
 
 ## Układ
 
-Menu wysuwane z boku na każdym ekranie (przycisk ☰ w górnym pasku, zamykanie kliknięciem obok, wyborem albo Esc), górny pasek z trzema krokami, kolumna „Dokumenty sprawy” (264–320 px, rośnie z oknem) i arkusz wybranego dokumentu. Rubryki układają się w dwie kolumny od ok. 480 px szerokości panelu. Poniżej 1180 px arkusz schodzi pod listę. Na komputerze kolumnę „Dokumenty sprawy” można zwinąć do paska numerów dokumentów (kolor statusu na dolnej krawędzi, kwadracik = poprawiony), żeby rubryki i PDF miały więcej miejsca. W oknach niższych niż 820 px górny pasek i nagłówek arkusza są niższe.
+Dwa ekrany sprawy. Menu wysuwane z boku jest na każdym ekranie bez zmian (☰ w górnym pasku: nowa sprawa, instrukcja, typy dokumentów z kreatorem, źródło wyników API albo dane przykładowe; zamykanie kliknięciem obok, wyborem albo Esc).
+
+**Ekran 1 (wgrywanie i przetwarzanie).** Jedna kolumna na środku (do 640 px): krótki nagłówek „Dokumenty sprawy”, pole przeciągania z „Wybierz pliki” i „Wybierz folder” w zwykłej skali tekstu, lista dodanych plików (nr, nazwa, rozmiar, ×), przycisk „Przetwórz N plików”. W trakcie: „Przetwarzanie…”, „Anuluj” i status przy każdym pliku. Kroki 1–2–3 w górnym pasku są tylko tutaj. Pytanie „Przywrócić poprawki?” pojawia się nad listą.
+
+**Ekran 2 (wynik).** Górny pasek: ☰, znak O2J, „Sprawa: …”, dyskretny znacznik „Dane przykładowe” w trybie atrapy i po prawej jedyny przycisk pobierania „Pobierz ▾”. Główny klik pobiera ZIP sprawy, rozwinięcie daje „ZIP całej sprawy” i „JSON tego dokumentu” oraz informację o niepobranych poprawkach. Drugi pasek: „Dokumenty 5 · 1 błąd ▾” (informacja o błędach i nierozpoznanych widoczna także przy zamkniętym panelu), pośrodku „‹ nazwa.pdf · 1 z 5 ›”, po prawej „16/22 pól · N poprawek” i „⋯ Opcje dokumentu” (przetwórz ten plik ponownie, ukryj/pokaż PDF). Panele otwierają się pod swoim przyciskiem, nie z boku; Esc i kliknięcie obok zamykają je, fokus wraca do przycisku. Panel „Dokumenty” ma listę plików ze statusami, „Ponów błędne”, „Przetwórz ponownie”, podsumowanie typów i dodawanie plików lub folderu (nowe pliki zaczynają nową sprawę). Pod paskami dwie kolumny: formularz | PDF, z przeciąganym podziałem i niezależnym przewijaniem. Nagłówek kolumny formularza (typ dokumentu i „Formularz / JSON”) zostaje widoczny przy przewijaniu. Strony, zoom i ⤢ są w pasku podglądu.
+
+Rubryki układają się w dwie kolumny od ok. 480 px szerokości kolumny formularza, w trzy na szerokich ekranach. Poniżej 1180 px strona przewija się zwyczajnie, a PDF schodzi pod formularz; drugi pasek przykleja się do góry. Na telefonie drugi pasek ma dwa wiersze („Dokumenty ▾” i ⋯, potem ‹ nazwa › i wypełnienie), a „Pobierz ▾” zostaje przy prawej krawędzi. W oknach niższych niż 820 px oba paski są niższe.
+
+## Statusy i dopiski
+
+Status pliku to zawsze tekst z małą ikoną (✓ rozpoznany, ? nie rozpoznano, ! błąd, kółko w trakcie), bez kolorowego tła; kolor ma tylko ikona. Dopiski przy etykiecie rubryki są drobne i szare: „poprawione · cofnij”, „brak w dokumencie”, „str. N · metoda” (gdy API zwraca evidence), „w mianowniku”. Bez ramek wokół etykiety z wartością i bez kart wokół pól.
 
 ## Hierarchia akcji
 
-W kolumnie „Dokumenty sprawy” jest jedna wypełniona akcja naraz. Przed przetworzeniem: „Przetwórz N plików”. Po przetworzeniu: „Pobierz ZIP (N plików)” na górze kolumny, pod nim niższe obrysowane „Ponów błędne (N)” i „Przetwórz ponownie”. Gdy są ręczne poprawki, „Przetwórz ponownie” wymaga drugiego kliknięcia i mówi, ile poprawek usunie. Nagłówek arkusza ma tę samą wysokość we wszystkich stanach (wiersz informacji jest zawsze), więc pasek PDF nie skacze przy zmianie dokumentu. Ikony paska PDF to te same rysowane symbole SVG co reszta panelu, nie znaki Unicode.
+Na każdym ekranie jest jedna wypełniona akcja: „Przetwórz N plików” na ekranie 1, „Pobierz” na ekranie 2. Ponawianie i przetwarzanie od nowa są obrysowane i schowane w panelu „Dokumenty”. Gdy są ręczne poprawki, „Przetwórz ponownie” i „Przetwórz ten plik ponownie” wymagają drugiego kliknięcia i mówią, ile poprawek usuną.
+
+## Wstawianie z PDF-u
+
+Po zaznaczeniu tekstu w podglądzie pojawia się przycisk „Wstaw do: <rubryka>” przy lewej krawędzi podglądu, na wysokości zaznaczenia, i cienka strzałka w kolorze `brand` od zaznaczenia do przycisku (gdy zaznaczenie leży przy krawędzi, przycisk schodzi pod nie, a strzałka idzie w dół). Położenie liczy `layout.js` (`insertPlacement`). Ikony pasków to rysowane symbole SVG, nie znaki Unicode.
 
 ## Ruch
 

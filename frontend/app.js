@@ -2,18 +2,13 @@ import { ApiError, extractWithApi, extractWithMock, fetchDocumentTypes } from ".
 import { DOC_TYPES, getPath, typeLabel } from "./fields.js";
 import { zipStore } from "./zip.js";
 import { createPdfViewer } from "./pdfview.js";
+import { STATUS, docsSummary, insertPlacement, positionText, progressText } from "./layout.js";
 import { expectedDigits, pickAmount, pickCode, pickDate, pickDigits, pickText } from "./parse.js";
 import {
   DRAFT_STORAGE_KEY, alignDraft, buildDraft, caseKey, countChanges, describeDraft, findDraft,
   parseStore, plural, putDraft, unsavedPositions,
 } from "./draft.js";
 
-const STATUS_TEXT = {
-  selected: "Czeka na przetworzenie",
-  pending: "Przetwarzanie…",
-  unknown: "Nie rozpoznano",
-  error: "Błąd",
-};
 
 const state = {
   mode: readMode(),
@@ -36,7 +31,8 @@ const state = {
   active: null,       // rubryka z ostatnim fokusem: { index, path, field, apply(text) }
   saved: [],          // JSON danych z chwili ostatniego pobrania (po pozycji): do ostrzeżenia przed wyjściem
   restore: null,      // kopia robocza tej samej sprawy z pamięci przeglądarki, czeka na decyzję
-  docsCollapsed: false,
+  confirmRerun: false,   // „Przetwórz ponownie” czeka na drugie kliknięcie (są poprawki)
+  confirmDocRetry: null, // „Przetwórz ten plik ponownie” czeka na drugie kliknięcie (pozycja)
 };
 
 const viewers = new WeakMap(); // File → podgląd PDF (renderowany raz)
@@ -88,24 +84,30 @@ const el = {
   mode: $("mode-select"), modeFlag: $("mode-flag"), title: $("page-title"),
   steps: $("steps"), main: $("main"),
   viewCase: $("view-case"), viewHelp: $("view-help"), viewTypes: $("view-types"),
+  intake: $("intake"), result: $("result"),
   form: $("upload-form"), drop: $("drop"), input: $("file-input"), folderInput: $("folder-input"),
-  fileLabel: $("file-label"),
   list: $("file-list"), actions: $("actions"), submit: $("submit-btn"), note: $("actions-note"),
-  retryFailed: $("retry-failed"), cancel: $("cancel-btn"), announcer: $("announcer"),
+  cancel: $("cancel-btn"), announcer: $("announcer"),
   message: $("request-message"), messageText: $("request-text"), retryRequest: $("retry-request"),
-  tally: $("tally"), sheet: $("sheet"), work: document.querySelector(".work"),
-  summary: $("summary"), downloadAll: $("download-all"), downloadAllLabel: $("download-all-label"),
-  typesList: $("types-list"), typesSource: $("types-source"),
-  docs: $("docs"), docsToggle: $("docs-toggle"), docsToggleLabel: $("docs-toggle-label"), docsMini: $("docs-mini"),
   restoreBox: $("restore-box"), restoreText: $("restore-text"), restoreYes: $("restore-yes"), restoreNo: $("restore-no"),
-  unsavedNote: $("unsaved-note"),
+  sheet: $("sheet"), work: document.querySelector(".work"),
+  typesList: $("types-list"), typesSource: $("types-source"),
+  // ekran 2: górny pasek (Pobierz ▾) i drugi pasek (Dokumenty ▾, ‹ › , Opcje ⋯)
+  downloadSplit: $("download-split"), downloadZip: $("download-zip"), downloadMore: $("download-more"),
+  downloadMenu: $("download-menu"), downloadZipItem: $("download-zip-item"), downloadZipNote: $("download-zip-note"),
+  downloadJson: $("download-json"), downloadJsonNote: $("download-json-note"), unsavedNote: $("unsaved-note"),
+  docsBtn: $("docs-btn"), docsBtnLabel: $("docs-btn-label"), docsPanel: $("docs-panel"), docList: $("doc-list"),
+  retryFailed: $("retry-failed"), resubmit: $("resubmit-btn"), tally: $("tally"), cancelRetry: $("cancel-retry"),
+  docPrev: $("doc-prev"), docNext: $("doc-next"), docPos: $("doc-pos"), docProgress: $("doc-progress"),
+  docOptions: $("doc-options"), docOptionsMenu: $("doc-options-menu"),
+  docRetry: $("doc-retry"), docRetryLabel: $("doc-retry-label"), docRetryNote: $("doc-retry-note"),
+  docPdfToggle: $("doc-pdf-toggle"), docPdfLabel: $("doc-pdf-label"),
 };
 
 /* ---------- nawigacja ---------- */
 
 const NAV_KEY = "o2j-nav";
 const mobile = window.matchMedia("(max-width: 900px)");
-const narrow = window.matchMedia("(max-width: 1180px)");
 
 function setNav(collapsed) {
   el.app.dataset.nav = collapsed ? "collapsed" : "expanded";
@@ -165,7 +167,7 @@ function resetCase() {
   Object.assign(state, {
     caseName: null, files: [], urls: [], results: null, meta: null,
     notice: null, lastRun: null, selected: null, pending: false, pendingSet: null, abort: null, slow: false,
-    edits: [], active: null, saved: [], restore: null, confirmRerun: false,
+    edits: [], active: null, saved: [], restore: null, confirmRerun: false, confirmDocRetry: null,
   });
   draftWritten = false;
   el.input.value = "";
@@ -178,13 +180,13 @@ document.addEventListener("keydown", (event) => {
     el.menuBtn.focus();
     return;
   }
-  // ↑/↓ przełączają dokument, gdy fokus jest na liście plików
-  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.target.closest?.(".file-list")) {
+  // ↑/↓ przełączają dokument, gdy fokus jest na liście w panelu „Dokumenty”
+  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.target.closest?.(".doc-list")) {
     if (!state.files.length) return;
     event.preventDefault();
     const next = Math.min(state.files.length - 1, Math.max(0, (state.selected ?? 0) + (event.key === "ArrowDown" ? 1 : -1)));
     selectDocument(next);
-    el.list.querySelectorAll(".file-main")[next]?.focus();
+    el.docList.querySelectorAll(".doc-main")[next]?.focus();
   }
 });
 
@@ -254,6 +256,12 @@ el.folderInput.addEventListener("change", () => {
 el.drop.addEventListener("drop", (event) => {
   if (!state.pending && event.dataTransfer?.files?.length) addFiles(event.dataTransfer.files);
 });
+// na ekranie wyniku pliki można upuścić na otwarty panel „Dokumenty” (zaczynają nową sprawę)
+el.docsPanel.addEventListener("dragover", (event) => event.preventDefault());
+el.docsPanel.addEventListener("drop", (event) => {
+  event.preventDefault();
+  if (!state.pending && event.dataTransfer?.files?.length) addFiles(event.dataTransfer.files);
+});
 window.addEventListener("dragover", (event) => event.preventDefault());
 window.addEventListener("drop", (event) => event.preventDefault());
 
@@ -271,6 +279,7 @@ function removeFile(index) {
 
 function selectDocument(index) {
   if (state.selected === index) return;
+  state.confirmDocRetry = null;
   state.selected = index;
   state.active = null;
   state.pdfFull = false;
@@ -286,21 +295,27 @@ let rerunTimer = 0;
 const editedFieldCount = () => (state.results ?? []).reduce((sum, r, i) => sum + (r?.status === "ok" ? countEdits(i) : 0), 0);
 el.form.addEventListener("submit", (event) => {
   event.preventDefault();
+  runExtraction(null);
+});
+el.resubmit.addEventListener("click", () => {
+  if (state.pending) return;
   if (state.results && !state.confirmRerun && editedFieldCount() > 0) {
     state.confirmRerun = true;
     clearTimeout(rerunTimer);
     rerunTimer = setTimeout(() => { state.confirmRerun = false; render({ sheet: false }); }, 6000);
     render({ sheet: false });
-    announce(el.submit.textContent);
+    announce(el.resubmit.textContent);
     return;
   }
   clearTimeout(rerunTimer);
   state.confirmRerun = false;
+  closePopovers();
   runExtraction(null);
 });
-el.retryFailed.addEventListener("click", () => runExtraction(failedPositions()));
+el.retryFailed.addEventListener("click", () => { closePopovers({ focus: true }); runExtraction(failedPositions()); });
 el.retryRequest.addEventListener("click", () => runExtraction(state.lastRun));
 el.cancel.addEventListener("click", () => state.abort?.abort());
+el.cancelRetry.addEventListener("click", () => state.abort?.abort());
 
 el.restoreYes.addEventListener("click", restoreDraft);
 el.restoreNo.addEventListener("click", dropDraft);
@@ -331,7 +346,7 @@ async function runExtraction(positions) {
   if (!positions) Object.assign(state, { results: null, meta: null });
   hideInsertButton();
   render();
-  el.cancel.focus();   // przycisk „Przetwórz” jest teraz zablokowany, więc fokus nie może na nim zostać
+  (positions ? el.cancelRetry : el.cancel).focus();   // przycisk, którym zaczęto, jest teraz zablokowany
 
   const extract = state.mode === "mock" ? extractWithMock : extractWithApi;
   const started = performance.now();
@@ -351,7 +366,8 @@ async function runExtraction(positions) {
   if (state.abort !== controller) return;   // w międzyczasie zaczęto nową sprawę
 
   const focusWasHere = !document.activeElement || document.activeElement === document.body
-    || el.actions.contains(document.activeElement);
+    || el.actions.contains(document.activeElement) || el.cancelRetry === document.activeElement
+    || el.docsPanel.contains(document.activeElement);
   Object.assign(state, { pending: false, pendingSet: null, abort: null, slow: false });
   let focusTarget = el.submit;
 
@@ -396,12 +412,12 @@ async function runExtraction(positions) {
     }
     state.lastRun = null;
     announce(`${positions ? "Ponowiono" : "Przetworzono"} ${documents.length} ${plural(documents.length, "plik", "pliki", "plików")}. ${tallyText(documents)}`);
-    focusTarget = failedPositions().length ? el.retryFailed : null;
+    focusTarget = el.docsBtn;   // podpis przycisku mówi, ile jest plików i błędów
   }
   // przy ponawianiu arkusz innego dokumentu zostaje, żeby nie przerywać wpisywania
   render({ sheet: !positions || positions.includes(state.selected) });
   scheduleDraftSave();
-  if (focusWasHere) (focusTarget ?? el.list.querySelectorAll(".file-main")[state.selected] ?? el.submit).focus();
+  if (focusWasHere) ((focusTarget?.offsetParent ? focusTarget : null) ?? (state.results ? el.docsBtn : el.submit)).focus();
 }
 
 function tallyText(documents) {
@@ -424,6 +440,9 @@ function statusAt(index) {
   return state.results?.[index]?.status ?? "selected";
 }
 
+/** Ekran 1 (wgrywanie i przetwarzanie całości) albo ekran 2 (wynik sprawy). */
+const screenNow = () => (state.results ? "result" : "intake");
+
 function render({ sheet = true } = {}) {
   el.viewCase.hidden = state.view !== "case";
   el.viewHelp.hidden = state.view !== "help";
@@ -433,13 +452,20 @@ function render({ sheet = true } = {}) {
     if (b.dataset.view === state.view) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   });
+  const screen = screenNow();
+  el.viewCase.dataset.screen = screen;
+  el.intake.hidden = screen !== "intake";
+  el.result.hidden = screen !== "result";
+  if (screen !== "result") closePopovers();
   el.modeFlag.hidden = state.mode !== "mock";
   el.title.textContent = state.view === "help" ? "Instrukcja"
     : state.view === "types" ? "Typy dokumentów"
     : state.caseName ? `Sprawa: ${state.caseName}` : "Sprawa odwoławcza";
-  el.steps.hidden = state.view !== "case";   // kroki dotyczą tylko pracy ze sprawą
+  // kroki tylko na ekranie wgrywania i w trakcie przetwarzania; pobieranie tylko na ekranie wyniku
+  el.steps.hidden = state.view !== "case" || screen !== "intake";
+  el.downloadSplit.hidden = state.view !== "case" || screen !== "result";
 
-  const step = state.results ? 3 : state.files.length ? 2 : 1;
+  const step = state.pending ? 2 : state.files.length ? 2 : 1;
   el.steps.querySelectorAll("li").forEach((li) => {
     const n = Number(li.dataset.step);
     li.dataset.state = n < step ? "done" : n === step ? "current" : "todo";
@@ -450,8 +476,7 @@ function render({ sheet = true } = {}) {
   el.input.disabled = state.pending;
   el.folderInput.disabled = state.pending;
   el.drop.dataset.compact = String(state.files.length > 0);
-  el.drop.querySelector(".drop-title").textContent = state.files.length ? "Dodaj:" : "Przeciągnij tutaj pliki PDF";
-  el.fileLabel.textContent = state.files.length ? "Pliki" : "Wybierz pliki z dysku";
+  el.drop.dataset.busy = String(state.pending);
   const notice = state.notice;
   el.message.hidden = !notice;
   el.message.dataset.kind = notice?.kind ?? "error";
@@ -461,108 +486,61 @@ function render({ sheet = true } = {}) {
   if (state.restore) el.restoreText.textContent = `W tej przeglądarce jest kopia robocza tej sprawy: ${describeDraft(state.restore.draft)}. Przywrócenie wczyta zapisane wyniki i poprawki bez ponownego przetwarzania.`;
   el.actions.hidden = state.files.length === 0;
   el.submit.disabled = state.pending;
-  el.submit.classList.toggle("btn-line", Boolean(state.results || state.restore));   // przy pytaniu o kopię główną akcją jest „Przywróć”
+  el.submit.classList.toggle("btn-line", Boolean(state.restore));   // przy pytaniu o kopię główną akcją jest „Przywróć”
   const n = state.files.length;
-  el.submit.textContent = state.pending
-    ? (state.pendingSet ? "Ponawianie…" : "Przetwarzanie…")
-    : state.results && state.confirmRerun ? `Kliknij jeszcze raz: usunie poprawki (${editedFieldCount()})`
-    : state.results ? "Przetwórz ponownie" : `Przetwórz ${n} ${plural(n, "plik", "pliki", "plików")}`;
-  el.submit.dataset.confirm = String(Boolean(state.results && state.confirmRerun));
-  const failed = state.pending ? 0 : failedPositions().length;
-  el.retryFailed.hidden = failed === 0;
-  el.retryFailed.classList.toggle("btn-line", Boolean(state.results));   // pod „Pobierz ZIP” ponawianie jest akcją drugiego rzędu
-  el.retryFailed.textContent = `Ponów błędne (${failed})`;
-  el.cancel.hidden = !state.pending;
+  el.submit.textContent = state.pending ? "Przetwarzanie…" : `Przetwórz ${n} ${plural(n, "plik", "pliki", "plików")}`;
+  el.cancel.hidden = !(state.pending && screen === "intake");
+  el.cancelRetry.hidden = !(state.pending && screen === "result");
   el.note.textContent = !state.pending ? ""
     : state.slow ? "To trwa dłużej niż zwykle. Model wciąż czyta dokumenty. Możesz poczekać albo anulować."
-    : state.pendingSet ? `Ponowne przetwarzanie: ${state.pendingSet.size} ${plural(state.pendingSet.size, "plik", "pliki", "plików")} z błędem.`
     : "System rozpoznaje typ każdego dokumentu po treści i wyciąga dane.";
 
-  renderDocsToggle();
+  // panel „Dokumenty”: ponawianie i przetwarzanie od nowa
+  const failed = state.pending ? 0 : failedPositions().length;
+  el.retryFailed.hidden = failed === 0;
+  el.retryFailed.textContent = `Ponów błędne (${failed})`;
+  el.resubmit.disabled = state.pending;
+  el.resubmit.textContent = state.results && state.confirmRerun
+    ? `Kliknij jeszcze raz: usunie poprawki (${editedFieldCount()})`
+    : "Przetwórz ponownie";
+  el.resubmit.dataset.confirm = String(Boolean(state.confirmRerun));
+
   renderList();
+  renderDocbar();
   renderSummary();
   if (sheet) renderSheet();
 }
 
+/** Ikona statusu + tekst (kolor tylko w ikonie, status nigdy samym kolorem). */
+function statusNode(status, entry, className = "badge") {
+  const info = STATUS[status] ?? STATUS.selected;
+  const span = node("span", `${className} badge-${status}`);
+  span.innerHTML = `<svg class="ic" aria-hidden="true"><use href="#i-${info.icon}"/></svg>`;
+  span.append(status === "ok" ? typeLabel(entry.type) : info.text);
+  return span;
+}
+const badgeFor = (status, entry) => statusNode(status, entry);
+
 function renderList() {
   el.list.replaceChildren(...state.files.map(renderFileRow));
-  el.docsMini.replaceChildren(...state.files.map(renderMiniRow));
+  el.docList.replaceChildren(...(state.results ? state.files.map(renderDocRow) : []));
 }
 
-/* zwijana kolumna „Dokumenty sprawy” (tylko na komputerze, gdy są pliki): więcej miejsca na rubryki i PDF */
-const DOCS_KEY = "o2j-docs";
-state.docsCollapsed = readPref(DOCS_KEY, "expanded") === "collapsed";
-el.docsToggle.addEventListener("click", () => {
-  state.docsCollapsed = !state.docsCollapsed;
-  try { localStorage.setItem(DOCS_KEY, state.docsCollapsed ? "collapsed" : "expanded"); } catch { /* bez pamięci */ }
-  render({ sheet: false });
-  el.docsToggle.focus();
-});
-
-function renderDocsToggle() {
-  const collapsed = state.docsCollapsed && state.files.length > 0;
-  el.viewCase.dataset.docs = collapsed ? "collapsed" : "expanded";
-  el.docsToggle.hidden = state.files.length === 0;
-  el.docsToggle.setAttribute("aria-expanded", String(!collapsed));
-  const label = collapsed ? "Rozwiń listę dokumentów" : "Zwiń listę dokumentów";
-  el.docsToggleLabel.textContent = label;
-  el.docsToggle.title = label;
-  el.docsMini.hidden = !collapsed;
-}
-
-function renderMiniRow(file, index) {
-  const status = statusAt(index);
-  const entry = state.results?.[index];
-  const what = status === "ok" ? typeLabel(entry.type) : STATUS_TEXT[status];
-  const edited = entry?.status === "ok" && countEdits(index) ? ", poprawiony" : "";
-  const li = document.createElement("li");
-  const b = node("button", "docs-mini-btn", String(index + 1));
-  b.type = "button";
-  b.dataset.status = status;
-  b.dataset.current = String(index === state.selected);
-  b.setAttribute("aria-current", String(index === state.selected));
-  b.setAttribute("aria-label", `Pozycja ${index + 1}: ${file.name}, ${what}${edited}`);
-  b.title = `${file.name}: ${what}${edited}`;
-  if (edited) b.dataset.edited = "true";
-  b.addEventListener("click", () => selectDocument(index));
-  li.append(b);
-  return li;
-}
-
+/** Ekran 1: nr, nazwa, rozmiar, × (w trakcie przetwarzania zamiast × status). */
 function renderFileRow(file, index) {
   const status = statusAt(index);
-  const entry = state.results?.[index];
-  const li = document.createElement("li");
-  li.className = "file-row";
-  li.dataset.current = String(index === state.selected);
-
+  const li = node("li", "file-row");
   const pos = node("span", "file-pos", String(index + 1));
   pos.setAttribute("aria-hidden", "true");
-
-  const main = document.createElement("button");
-  main.type = "button";
-  main.className = "file-main";
-  main.setAttribute("aria-current", String(index === state.selected));
-  main.addEventListener("click", () => {
-    selectDocument(index);
-    if (narrow.matches) el.sheet.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-  const meta = node("span", "file-meta");
-  if (status !== "selected") meta.append(badgeFor(status, entry));
-  if (entry?.status === "ok") {
-    const c = completeness(entry, dataAt(index));
-    if (c) meta.append(node("span", null, `${c.filled}/${c.total} pól`));
-    if (countEdits(index)) meta.append(node("span", "file-edited", "poprawiony"));
-  } else {
-    meta.append(node("span", null, formatSize(file.size)));
-  }
-  main.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "file-name", file.name), meta);
-  li.append(pos, main);
-
-  if (!state.results && !state.pending) {
-    const remove = document.createElement("button");
+  const main = node("div", "file-main");
+  main.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "file-name", file.name));
+  const meta = node("span", "file-meta", formatSize(file.size));
+  li.append(pos, main, meta);
+  if (status === "pending") {
+    li.append(statusNode("pending", null, "badge file-state"));
+  } else if (!state.pending) {
+    const remove = node("button", "file-remove");
     remove.type = "button";
-    remove.className = "file-remove";
     remove.setAttribute("aria-label", `Usuń ${file.name} z listy`);
     remove.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>';
     remove.addEventListener("click", () => removeFile(index));
@@ -571,18 +549,147 @@ function renderFileRow(file, index) {
   return li;
 }
 
-function badgeFor(status, entry) {
-  if (status === "ok") return node("span", "badge badge-ok", typeLabel(entry.type));
-  return node("span", `badge badge-${status}`, STATUS_TEXT[status]);
+/** Ekran 2, panel „Dokumenty”: wybór dokumentu, status, wypełnienie, poprawki. */
+function renderDocRow(file, index) {
+  const status = statusAt(index);
+  const entry = state.results?.[index];
+  const li = node("li", "doc-row");
+  li.dataset.current = String(index === state.selected);
+  const b = node("button", "doc-main");
+  b.type = "button";
+  b.setAttribute("aria-current", String(index === state.selected));
+  const pos = node("span", "doc-pos", String(index + 1));
+  pos.setAttribute("aria-hidden", "true");
+  const text = node("span", "doc-text");
+  const meta = node("span", "doc-meta");
+  meta.append(statusNode(status, entry));
+  if (entry?.status === "ok") {
+    const c = completeness(entry, dataAt(index));
+    if (c) meta.append(node("span", null, `${c.filled}/${c.total} pól`));
+    const edits = countEdits(index);
+    if (edits) meta.append(node("span", "doc-edited", `${edits} ${plural(edits, "poprawka", "poprawki", "poprawek")}`));
+  }
+  text.append(node("span", "sr-only", `Pozycja ${index + 1}: `), fileNameNode("span", "doc-name", file.name), meta);
+  b.append(pos, text);
+  b.addEventListener("click", () => {
+    selectDocument(index);
+    closePopovers({ focus: true });
+  });
+  li.append(b);
+  return li;
 }
 
-/* ---------- podsumowanie sprawy ---------- */
+/* ---------- drugi pasek: Dokumenty ▾, ‹ nazwa · 1 z 5 ›, wypełnienie, ⋯ ---------- */
+
+function renderDocbar() {
+  if (!state.results) return;
+  const statuses = state.files.map((_, i) => statusAt(i));
+  const sum = docsSummary(statuses);
+  el.docsBtnLabel.replaceChildren(`Dokumenty ${sum.count}`);
+  if (sum.attention) {
+    // informacja o błędach widoczna także przy zamkniętym panelu: tekst, ikona tylko jako dodatek
+    const att = node("span", `docbar-attention${sum.alert ? " is-alert" : ""}`);
+    att.append(node("span", "docbar-sep", "·"));
+    if (sum.alert) att.insertAdjacentHTML("beforeend", '<svg class="ic ic-sm" aria-hidden="true"><use href="#i-error"/></svg>');
+    att.append(sum.attention);
+    el.docsBtnLabel.append(att);
+  }
+  const index = state.selected ?? 0;
+  const file = state.files[index];
+  const entry = state.results[index];
+  el.docPos.textContent = file ? positionText(file.name, index, state.files.length) : "";
+  el.docPrev.disabled = index <= 0;
+  el.docNext.disabled = index >= state.files.length - 1;
+  const c = entry?.status === "ok" ? completeness(entry, dataAt(index)) : null;
+  el.docProgress.textContent = entry?.status === "ok" ? progressText(c, countEdits(index)) : "";
+  // ⋯ Opcje dokumentu
+  const edits = entry?.status === "ok" ? countEdits(index) : 0;
+  el.docRetry.disabled = state.pending;
+  el.docRetryLabel.textContent = state.confirmDocRetry === index
+    ? `Kliknij jeszcze raz: usunie poprawki (${edits})`
+    : "Przetwórz ten plik ponownie";
+  el.docRetryNote.textContent = edits && state.confirmDocRetry !== index ? "poprawki w tym pliku przepadną" : "";
+  el.docPdfLabel.textContent = state.showPdf ? "Ukryj podgląd PDF" : "Pokaż podgląd PDF";
+}
+
+el.docPrev.addEventListener("click", () => selectDocument(Math.max(0, (state.selected ?? 0) - 1)));
+el.docNext.addEventListener("click", () => selectDocument(Math.min(state.files.length - 1, (state.selected ?? 0) + 1)));
+
+let docRetryTimer = 0;
+el.docRetry.addEventListener("click", () => {
+  const index = state.selected;
+  if (index === null || state.pending) return;
+  const edits = state.results?.[index]?.status === "ok" ? countEdits(index) : 0;
+  if (edits && state.confirmDocRetry !== index) {
+    state.confirmDocRetry = index;
+    clearTimeout(docRetryTimer);
+    docRetryTimer = setTimeout(() => { state.confirmDocRetry = null; renderDocbar(); }, 6000);
+    renderDocbar();
+    announce(el.docRetryLabel.textContent);
+    return;
+  }
+  state.confirmDocRetry = null;
+  closePopovers({ focus: true });
+  runExtraction([index]);
+});
+el.docPdfToggle.addEventListener("click", () => {
+  state.showPdf = !state.showPdf;
+  try { localStorage.setItem("o2j-pdf", state.showPdf ? "1" : "0"); } catch { /* bez pamięci */ }
+  closePopovers({ focus: true });
+  renderDocbar();
+  renderSheet();
+});
+
+/* ---------- panele rozwijane pod przyciskiem (Dokumenty, Pobierz, Opcje) ----------
+   Esc i kliknięcie obok zamykają panel, fokus wraca do przycisku. */
+
+const POPOVERS = [];
+function popover(trigger, panel, { onOpen } = {}) {
+  const p = { trigger, panel };
+  p.open = () => {
+    closePopovers();
+    panel.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    onOpen?.();
+  };
+  p.close = (focus = false) => {
+    if (panel.hidden) return;
+    panel.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (focus) trigger.focus();
+  };
+  trigger.addEventListener("click", () => (panel.hidden ? p.open() : p.close()));
+  POPOVERS.push(p);
+  return p;
+}
+function closePopovers({ focus = false } = {}) {
+  POPOVERS.forEach((p) => p.close(focus && !p.panel.hidden));
+}
+const openPopover = () => POPOVERS.find((p) => !p.panel.hidden);
+
+popover(el.docsBtn, el.docsPanel, {
+  onOpen: () => (el.docList.querySelector('[aria-current="true"]') ?? el.docList.querySelector("button"))?.focus(),
+});
+popover(el.downloadMore, el.downloadMenu, { onOpen: () => el.downloadZipItem.focus() });
+popover(el.docOptions, el.docOptionsMenu, { onOpen: () => el.docRetry.focus() });
+
+document.addEventListener("pointerdown", (event) => {
+  const p = openPopover();
+  if (p && !p.panel.contains(event.target) && !p.trigger.contains(event.target)) p.close();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const p = openPopover();
+  if (!p) return;
+  event.stopImmediatePropagation();
+  p.close(true);
+}, true);
+
+/* ---------- podsumowanie sprawy i pobieranie ---------- */
 
 function renderSummary() {
-  el.summary.hidden = !state.results;
-  el.actions.dataset.done = String(Boolean(state.results) && !state.pending);
   if (!state.results) {
-    el.downloadAll.hidden = true;
+    el.tally.replaceChildren();
     el.unsavedNote.hidden = true;
     return;
   }
@@ -611,9 +718,18 @@ function renderSummary() {
   el.tally.replaceChildren(...items);
 
   const files = resultFiles();
-  el.downloadAll.hidden = files.length === 0 || state.pending;
-  el.downloadAllLabel.textContent = `Pobierz ZIP (${files.length} ${plural(files.length, "plik", "pliki", "plików")})`;
+  const zipText = `${files.length} ${plural(files.length, "plik", "pliki", "plików")} JSON`;
+  el.downloadZip.disabled = files.length === 0 || state.pending;
+  el.downloadZipItem.disabled = el.downloadZip.disabled;
+  el.downloadZip.title = `Pobierz ZIP całej sprawy (${zipText})${unsaved().length ? ". Są niepobrane poprawki." : ""}`;
+  el.downloadZipNote.textContent = files.length ? `${safeName(state.caseName ?? "sprawa")}.zip · ${zipText}` : "brak plików do pobrania";
+  const index = state.selected;
+  const entry = index !== null ? state.results[index] : null;
+  el.downloadJson.disabled = entry?.status !== "ok";
+  el.downloadJsonNote.textContent = entry?.status === "ok" ? jsonName(state.files[index].name)
+    : entry?.status === "unknown" ? "nierozpoznany: w ZIP-ie jako {}" : "ten plik nie ma danych";
   const open = unsaved().length;
+  el.downloadSplit.dataset.unsaved = String(open > 0);
   el.unsavedNote.hidden = !open;
   el.unsavedNote.textContent = open
     ? `Poprawki w ${open} ${plural(open, "dokumencie", "dokumentach", "dokumentach")} nie są jeszcze pobrane. Kopia robocza zostaje w tej przeglądarce.`
@@ -636,137 +752,106 @@ function resultFiles() {
   return files;
 }
 
-el.downloadAll.addEventListener("click", () => {
+function downloadZip() {
   const files = resultFiles();
   if (!files.length) return;
   downloadBlob(`${safeName(state.caseName ?? "sprawa")}.zip`, zipStore(files));
   markSaved(state.results.map((_, i) => i));
+}
+el.downloadZip.addEventListener("click", downloadZip);
+el.downloadZipItem.addEventListener("click", () => { closePopovers({ focus: true }); downloadZip(); });
+el.downloadJson.addEventListener("click", () => {
+  const index = state.selected;
+  if (index === null || state.results?.[index]?.status !== "ok") return;
+  closePopovers({ focus: true });
+  downloadJson(state.files[index].name, dataAt(index));
+  markSaved([index]);
 });
 
-/* ---------- arkusz ---------- */
+/* ---------- arkusz: formularz | PDF ---------- */
 
 function renderSheet() {
   const index = state.selected;
   const file = index !== null ? state.files[index] : null;
-
-  if (!file) {
-    el.sheet.dataset.layout = "guide";
-    el.sheet.replaceChildren(emptyGuide());
+  if (!file || !state.results) {
+    el.sheet.replaceChildren();
     return;
   }
 
-  const entry = state.results?.[index];
-  const head = node("div", "sheet-head");
-  const titleRow = node("div", "sheet-title-row");
-  const title = fileNameNode("h2", "sheet-title", file.name);
+  const entry = state.results[index];
+  const status = statusAt(index);
+  const head = node("div", "col-head");
+  const title = node("h2", "col-title");
   title.id = "sheet-heading";
-  titleRow.append(title);
-  const pending = statusAt(index) === "pending";
-  if (entry || pending) titleRow.append(badgeFor(statusAt(index), entry));
-  head.append(titleRow);
+  title.append(node("span", "sr-only", `${file.name}: `));
 
   let left;
-  const infoLine = (text) => head.append(node("p", "sheet-info", text));
-  if (pending) {
-    infoLine("Trwa rozpoznawanie typu i odczyt danych.");
+  if (status === "pending") {
+    title.append(statusNode("pending", entry, "col-status"));
     left = node("div", "skeleton");
     for (let i = 0; i < 8; i++) left.append(node("div"));
     left.append(node("p", "sr-only", "Trwa przetwarzanie dokumentu."));
-  } else if (!entry) {
-    infoLine(state.restore ? "Czeka na decyzję o kopii roboczej." : "Czeka na przetworzenie.");
-    left = stateBlock("Plik czeka na przetworzenie",
-      ["Dodaj pozostałe dokumenty sprawy i kliknij „Przetwórz”. Dane tego pliku pojawią się w tym miejscu."]);
+    head.append(title);
   } else if (entry.status === "unknown") {
-    infoLine("Bez danych do sprawdzenia. W wynikach sprawy: plik z {}.");
+    title.append(statusNode("unknown", entry, "col-status"));
+    head.append(title);
     left = stateBlock("Nie rozpoznano typu dokumentu", [
       "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie plik JSON z samym {}, zgodnie z wymogiem UZP.",
       "Jeśli to jednak jeden z tych dokumentów, sprawdź w podglądzie, czy PDF jest kompletny i czytelny.",
     ]);
   } else if (entry.status === "error") {
-    infoLine("Plik nie trafi do wyników sprawy.");
+    title.append(statusNode("error", entry, "col-status"));
+    head.append(title);
     // skanu bez OCR nie naprawi ponowienie, więc nie obiecujemy tego
     const ocr = entry.error?.code === "ocr_required";
     left = stateBlock("Nie udało się przetworzyć pliku", [
       entry.error?.message ?? "Wystąpił błąd podczas odczytu dokumentu.",
       ocr
         ? "To skan bez warstwy tekstu, a serwer nie odczytał go przez OCR. Pozostałe pliki sprawy są dostępne; dane z tego pisma trzeba wprowadzić ręcznie albo wgrać PDF z tekstem."
-        : "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników, dopóki nie uda się go przetworzyć: spróbuj ponownie przyciskiem „Ponów błędne”.",
+        : "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników, dopóki nie uda się go przetworzyć: użyj „Ponów błędne” w panelu „Dokumenty”.",
     ]);
     if (entry.error?.code) left.append(node("p", "state-code", `Kod błędu: ${entry.error.code}`));
   } else {
-    head.append(sheetTools(index, file), sheetInfo(index, entry));
+    title.append(typeLabel(entry.type));
+    head.append(title, sheetModeSwitch());
     left = state.sheetMode === "json" ? jsonView(dataAt(index)) : fieldsView(index, entry);
+    if (state.sheetMode === "fields") {
+      head.append(node("p", "col-hint", state.showPdf
+        ? "Wpisuj wprost w rubryki albo zaznacz tekst w PDF-ie i wstaw go do rubryki (z klawiatury: Alt+↓ w rubryce)."
+        : "Wpisuj wprost w rubryki."));
+    }
   }
 
   const body = node("div", "sheet-body");
   const pane = node("div", "fields-pane");
-  pane.append(left);
+  pane.append(head, left);
   body.dataset.pdf = String(state.showPdf);
   body.dataset.full = String(state.showPdf && state.pdfFull);
   body.style.setProperty("--split", `${state.split}%`);
   if (state.showPdf) body.append(pane, splitter(body), pdfPane(index));
   else body.append(pane);
-  el.sheet.dataset.layout = "doc";
-  el.sheet.replaceChildren(head, body);
+  el.sheet.replaceChildren(body);
 }
 
-function sheetTools(index, file) {
-  const tools = node("div", "sheet-tools");
+/** „Formularz / JSON” w nagłówku kolumny formularza. */
+function sheetModeSwitch() {
   const seg = node("div", "seg");
   seg.setAttribute("role", "group");
   seg.setAttribute("aria-label", "Widok danych");
-  for (const [mode, label] of [["fields", "Pola"], ["json", "JSON"]]) {
+  for (const [mode, label] of [["fields", "Formularz"], ["json", "JSON"]]) {
     const b = node("button", null, label);
     b.type = "button";
     b.setAttribute("aria-pressed", String(state.sheetMode === mode));
     b.addEventListener("click", () => { state.sheetMode = mode; state.active = null; hideInsertButton(); renderSheet(); });
     seg.append(b);
   }
-  const download = node("button", "btn");
-  download.type = "button";
-  download.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>';
-  download.append(`Pobierz ${jsonName(file.name)}`);
-  download.addEventListener("click", () => {
-    downloadJson(file.name, dataAt(index));
-    markSaved([index]);
-  });
-  const pdfToggle = node("button", "btn btn-line btn-toggle", "Podgląd PDF");
-  pdfToggle.type = "button";
-  pdfToggle.setAttribute("aria-pressed", String(state.showPdf));
-  pdfToggle.addEventListener("click", () => {
-    state.showPdf = !state.showPdf;
-    try { localStorage.setItem("o2j-pdf", state.showPdf ? "1" : "0"); } catch { /* bez pamięci */ }
-    renderSheet();
-  });
-  tools.append(seg, pdfToggle, download);
-  return tools;
-}
-
-function sheetInfo(index, entry) {
-  const info = node("p", "sheet-info");
-  info.id = "sheet-info";
-  fillSheetInfo(info, index, entry);
-  return info;
-}
-function fillSheetInfo(info, index, entry) {
-  const c = completeness(entry, dataAt(index));
-  const edited = countEdits(index);
-  const parts = [];
-  if (c) parts.push(`Wypełniono ${c.filled} z ${c.total} pól`);
-  if (edited) parts.push(`poprawiono ręcznie: ${edited}`);
-  info.replaceChildren(parts.join(" · "));
-  if (state.sheetMode === "fields") {
-    info.append(node("span", "sheet-hint", state.showPdf
-      ? "Wpisuj wprost w rubryki albo wstaw tekst zaznaczony w PDF-ie (z klawiatury: Alt+↓ w rubryce)."
-      : "Wpisuj wprost w rubryki."));
-  }
+  return seg;
 }
 
 /** Po wpisaniu wartości: odświeża liczniki bez przebudowy arkusza (fokus zostaje). */
 function refreshAfterEdit(index) {
-  const info = $("sheet-info");
-  if (info) fillSheetInfo(info, index, state.results[index]);
   renderList();
+  renderDocbar();
   renderSummary();
   scheduleDraftSave();
 }
@@ -782,29 +867,6 @@ function pdfPane(index) {
   }
   viewer.element.dataset.target = state.active?.index === index ? state.active.field.label : "";
   wrap.append(viewer.element);
-  return wrap;
-}
-
-function emptyGuide() {
-  const wrap = node("div", "state guide-wrap");
-  const h = node("h2", "state-title", "Zacznij od wgrania dokumentów sprawy");
-  h.id = "sheet-heading";
-  wrap.append(h, node("p", null, "Panel odczyta każdy PDF, rozpozna jego typ po treści i przygotuje plik JSON w formacie Urzędu Zamówień Publicznych."));
-  const guide = node("ol", "guide");
-  [
-    ["Wgraj PDF-y", "Przeciągnij pliki na pole „Dokumenty sprawy” albo wskaż cały folder sprawy."],
-    ["Przetwórz", "Kliknij „Przetwórz”. Każdy plik dostanie swój status."],
-    ["Sprawdź i pobierz", "Popraw dane wprost w rubrykach, porównując z PDF-em obok, i pobierz JSON-y sprawy."],
-  ].forEach(([t, text], i) => {
-    const li = node("li");
-    const no = node("span", "guide-no", String(i + 1));
-    no.setAttribute("aria-hidden", "true");
-    const box = node("div", "guide-text");
-    box.append(node("strong", null, t), node("span", null, text));
-    li.append(no, box);
-    guide.append(li);
-  });
-  wrap.append(guide);
   return wrap;
 }
 
@@ -933,7 +995,7 @@ function restoreDraft() {
   draftWritten = true;
   render();
   announce(`Przywrócono poprawki: ${describeDraft(draft)}.`);
-  el.list.querySelectorAll(".file-main")[state.selected]?.focus();
+  el.docsBtn.focus();
 }
 
 function dropDraft() {
@@ -1371,11 +1433,18 @@ function genericGroup(title, data, ctx) {
 const insertBtn = node("button", "insert-btn");
 insertBtn.type = "button";
 insertBtn.hidden = true;
-document.body.append(insertBtn);
+const SVG_NS = "http://www.w3.org/2000/svg";
+const insertArrow = document.createElementNS(SVG_NS, "svg");
+insertArrow.classList.add("insert-arrow");
+insertArrow.setAttribute("aria-hidden", "true");
+insertArrow.innerHTML = '<defs><marker id="insert-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1.5 8 5 1 8.5"/></marker></defs><line marker-end="url(#insert-head)"/><circle r="2.5"/>';
+insertArrow.style.display = "none";
+document.body.append(insertArrow, insertBtn);
 let pendingSelection = "";
 
 function hideInsertButton() {
   insertBtn.hidden = true;
+  insertArrow.style.display = "none";
   pendingSelection = "";
 }
 
@@ -1385,14 +1454,28 @@ document.addEventListener("mouseup", (event) => {
   const selection = window.getSelection();
   const text = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
   if (!inPdf || !text) { hideInsertButton(); return; }
-  const rect = selection.getRangeAt(0).getBoundingClientRect();
+  const sel = selection.getRangeAt(0).getBoundingClientRect();
   const ready = state.active && state.active.index === state.selected && state.sheetMode === "fields";
   pendingSelection = text;
   insertBtn.textContent = ready ? `Wstaw do: ${state.active.field.label}` : "Najpierw kliknij rubrykę po lewej";
   insertBtn.disabled = !ready;
-  insertBtn.style.left = `${Math.min(window.innerWidth - 270, Math.max(8, rect.left))}px`;
-  insertBtn.style.top = `${Math.min(window.innerHeight - 48, rect.bottom + 8)}px`;
   insertBtn.hidden = false;
+  const pane = inPdf.getBoundingClientRect();
+  const place = insertPlacement(sel, pane, { width: insertBtn.offsetWidth, height: insertBtn.offsetHeight },
+    { width: window.innerWidth, height: window.innerHeight });
+  insertBtn.style.left = `${place.button.left}px`;
+  insertBtn.style.top = `${place.button.top}px`;
+  // cienka strzałka w kolorze akcentu: od zaznaczenia do przycisku (tylko gdy jest dokąd wstawić)
+  if (ready && place.arrow) {
+    const line = insertArrow.querySelector("line");
+    const dot = insertArrow.querySelector("circle");
+    line.setAttribute("x1", place.arrow.x1); line.setAttribute("y1", place.arrow.y1);
+    line.setAttribute("x2", place.arrow.x2); line.setAttribute("y2", place.arrow.y2);
+    dot.setAttribute("cx", place.arrow.x1); dot.setAttribute("cy", place.arrow.y1);
+    insertArrow.style.display = "";
+  } else {
+    insertArrow.style.display = "none";
+  }
 });
 insertBtn.addEventListener("mousedown", (event) => event.preventDefault());   // nie gubimy zaznaczenia
 insertBtn.addEventListener("click", () => {
@@ -1425,7 +1508,7 @@ document.addEventListener("keydown", (event) => {
   const stage = el.sheet.querySelector(".pdfv-stage");
   event.preventDefault();
   if (stage) stage.focus();
-  else announce("Podgląd PDF jest wyłączony. Włącz przycisk „Podgląd PDF”.");
+  else announce("Podgląd PDF jest ukryty. Włącz go w menu „Opcje dokumentu”.");
 });
 
 document.addEventListener("pdf-pick", (event) => {
