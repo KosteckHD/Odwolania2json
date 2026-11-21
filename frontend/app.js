@@ -165,7 +165,7 @@ function resetCase() {
   Object.assign(state, {
     caseName: null, files: [], urls: [], results: null, meta: null,
     notice: null, lastRun: null, selected: null, pending: false, pendingSet: null, abort: null, slow: false,
-    edits: [], active: null, saved: [], restore: null,
+    edits: [], active: null, saved: [], restore: null, confirmRerun: false,
   });
   draftWritten = false;
   el.input.value = "";
@@ -281,8 +281,21 @@ function selectDocument(index) {
 
 /* ---------- wysyłka ---------- */
 
+/* „Przetwórz ponownie” zastępuje wyniki i kasuje ręczne poprawki: przy poprawkach pyta drugim kliknięciem */
+let rerunTimer = 0;
+const editedFieldCount = () => (state.results ?? []).reduce((sum, r, i) => sum + (r?.status === "ok" ? countEdits(i) : 0), 0);
 el.form.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (state.results && !state.confirmRerun && editedFieldCount() > 0) {
+    state.confirmRerun = true;
+    clearTimeout(rerunTimer);
+    rerunTimer = setTimeout(() => { state.confirmRerun = false; render({ sheet: false }); }, 6000);
+    render({ sheet: false });
+    announce(el.submit.textContent);
+    return;
+  }
+  clearTimeout(rerunTimer);
+  state.confirmRerun = false;
   runExtraction(null);
 });
 el.retryFailed.addEventListener("click", () => runExtraction(failedPositions()));
@@ -452,9 +465,12 @@ function render({ sheet = true } = {}) {
   const n = state.files.length;
   el.submit.textContent = state.pending
     ? (state.pendingSet ? "Ponawianie…" : "Przetwarzanie…")
+    : state.results && state.confirmRerun ? `Kliknij jeszcze raz: usunie poprawki (${editedFieldCount()})`
     : state.results ? "Przetwórz ponownie" : `Przetwórz ${n} ${plural(n, "plik", "pliki", "plików")}`;
+  el.submit.dataset.confirm = String(Boolean(state.results && state.confirmRerun));
   const failed = state.pending ? 0 : failedPositions().length;
   el.retryFailed.hidden = failed === 0;
+  el.retryFailed.classList.toggle("btn-line", Boolean(state.results));   // pod „Pobierz ZIP” ponawianie jest akcją drugiego rzędu
   el.retryFailed.textContent = `Ponów błędne (${failed})`;
   el.cancel.hidden = !state.pending;
   el.note.textContent = !state.pending ? ""
@@ -564,7 +580,12 @@ function badgeFor(status, entry) {
 
 function renderSummary() {
   el.summary.hidden = !state.results;
-  if (!state.results) return;
+  el.actions.dataset.done = String(Boolean(state.results) && !state.pending);
+  if (!state.results) {
+    el.downloadAll.hidden = true;
+    el.unsavedNote.hidden = true;
+    return;
+  }
   const byType = new Map();
   for (const r of state.results) if (r.status === "ok") byType.set(r.type, (byType.get(r.type) ?? 0) + 1);
   const order = [...Object.keys(DOC_TYPES), ...[...byType.keys()].filter((t) => !DOC_TYPES[t])];
@@ -590,8 +611,8 @@ function renderSummary() {
   el.tally.replaceChildren(...items);
 
   const files = resultFiles();
-  el.downloadAll.hidden = files.length === 0;
-  el.downloadAllLabel.textContent = `Pobierz wyniki (ZIP, ${files.length} ${plural(files.length, "plik", "pliki", "plików")})`;
+  el.downloadAll.hidden = files.length === 0 || state.pending;
+  el.downloadAllLabel.textContent = `Pobierz ZIP (${files.length} ${plural(files.length, "plik", "pliki", "plików")})`;
   const open = unsaved().length;
   el.unsavedNote.hidden = !open;
   el.unsavedNote.textContent = open
@@ -645,22 +666,31 @@ function renderSheet() {
   head.append(titleRow);
 
   let left;
+  const infoLine = (text) => head.append(node("p", "sheet-info", text));
   if (pending) {
+    infoLine("Trwa rozpoznawanie typu i odczyt danych.");
     left = node("div", "skeleton");
     for (let i = 0; i < 8; i++) left.append(node("div"));
     left.append(node("p", "sr-only", "Trwa przetwarzanie dokumentu."));
   } else if (!entry) {
+    infoLine(state.restore ? "Czeka na decyzję o kopii roboczej." : "Czeka na przetworzenie.");
     left = stateBlock("Plik czeka na przetworzenie",
       ["Dodaj pozostałe dokumenty sprawy i kliknij „Przetwórz”. Dane tego pliku pojawią się w tym miejscu."]);
   } else if (entry.status === "unknown") {
+    infoLine("Bez danych do sprawdzenia. W wynikach sprawy: plik z {}.");
     left = stateBlock("Nie rozpoznano typu dokumentu", [
       "Treść pliku nie pasuje do odwołania, pełnomocnictwa ani potwierdzenia przelewu, więc nie wyciągnięto danych. W wynikach sprawy dostanie plik JSON z samym {}, zgodnie z wymogiem UZP.",
       "Jeśli to jednak jeden z tych dokumentów, sprawdź w podglądzie, czy PDF jest kompletny i czytelny.",
     ]);
   } else if (entry.status === "error") {
+    infoLine("Plik nie trafi do wyników sprawy.");
+    // skanu bez OCR nie naprawi ponowienie, więc nie obiecujemy tego
+    const ocr = entry.error?.code === "ocr_required";
     left = stateBlock("Nie udało się przetworzyć pliku", [
       entry.error?.message ?? "Wystąpił błąd podczas odczytu dokumentu.",
-      "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników, dopóki nie uda się go przetworzyć: spróbuj ponownie przyciskiem „Ponów błędne”.",
+      ocr
+        ? "To skan bez warstwy tekstu, a serwer nie odczytał go przez OCR. Pozostałe pliki sprawy są dostępne; dane z tego pisma trzeba wprowadzić ręcznie albo wgrać PDF z tekstem."
+        : "Pozostałe pliki sprawy są dostępne. Ten plik nie trafi do wyników, dopóki nie uda się go przetworzyć: spróbuj ponownie przyciskiem „Ponów błędne”.",
     ]);
     if (entry.error?.code) left.append(node("p", "state-code", `Kod błędu: ${entry.error.code}`));
   } else {
@@ -727,7 +757,7 @@ function fillSheetInfo(info, index, entry) {
   info.replaceChildren(parts.join(" · "));
   if (state.sheetMode === "fields") {
     info.append(node("span", "sheet-hint", state.showPdf
-      ? "Wpisuj wprost w rubryki albo zaznacz tekst w PDF-ie (z klawiatury: Alt+↓ w rubryce)."
+      ? "Wpisuj wprost w rubryki albo wstaw tekst zaznaczony w PDF-ie (z klawiatury: Alt+↓ w rubryce)."
       : "Wpisuj wprost w rubryki."));
   }
 }
@@ -1231,6 +1261,7 @@ function textControl(field, value, id, commit) {
   const input = document.createElement(multi ? "textarea" : "input");
   input.id = id;
   input.className = "box-in";
+  input.placeholder = " ";   // pusta rubryka jest zakreskowana jak puste kratki (:placeholder-shown)
   if (multi) input.rows = 1;
   input.value = value ?? "";
   const grow = () => {
@@ -1270,6 +1301,7 @@ function amountControl(value, id, commit) {
   const input = document.createElement("input");
   input.id = id;
   input.className = "box-in";
+  input.placeholder = " ";
   input.inputMode = "decimal";
   input.value = value == null ? "" : Number(value).toLocaleString("pl-PL", { minimumFractionDigits: 2 });
   const save = () => {
@@ -1442,9 +1474,22 @@ function renderTypes() {
     const count = (t.fields ?? []).length;
     card.append(head, node("p", "type-meta", `${count} ${plural(count, "pole", "pola", "pól")} w schemacie`));
     if (count) {
-      const ul = node("ul", "type-fields");
-      t.fields.forEach((f) => ul.append(node("li", null, typeof f === "string" ? f : f.label ?? f.name ?? String(f))));
-      card.append(ul);
+      // pola zgrupowane po sekcji („Odwołujący: Nazwa” → wiersz „Odwołujący” z listą pól), bez chmury etykiet
+      const groups = new Map();
+      t.fields.forEach((f) => {
+        const text = typeof f === "string" ? f : f.label ?? f.name ?? String(f);
+        const cut = text.indexOf(": ");
+        const [group, name] = cut > 0 ? [text.slice(0, cut), text.slice(cut + 2)] : ["", text];
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group).push(name);
+      });
+      const dl = node("dl", "type-fields");
+      groups.forEach((names, group) => {
+        const row = node("div");
+        row.append(node("dt", null, group || "Pola"), node("dd", null, names.join(", ")));
+        dl.append(row);
+      });
+      card.append(dl);
     }
     return card;
   }));
@@ -1487,7 +1532,7 @@ function downloadBlob(name, blob) {
 /** Nazwa pliku, którą da się złamać po „_” i „-” albo przed rozszerzeniem zamiast w środku słowa. */
 function fileNameNode(tag, className, name) {
   const n = node(tag, className);
-  name.split(/(?<=[_\-])|(?=\.)/).forEach((part, i) => {
+  name.split(/(?<=[_\-])/).forEach((part, i) => {
     if (i) n.append(document.createElement("wbr"));
     n.append(part);
   });

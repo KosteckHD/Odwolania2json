@@ -27,6 +27,11 @@
     <symbol id="i-types" viewBox="0 0 24 24"><path d="M4 5.5h7v6H4zM13 5.5h7v6h-7zM4 13.5h7v6H4z"/><path d="M16.5 14v5M14 16.5h5"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 6.5h6l2 2h9v10h-17z"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8.5 8.5h11v11h-11z"/><path d="M15.5 8.5v-4h-11v11h4"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M14.5 6 8.5 12l6 6"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M6 12h12M12 6v12"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5l-6 6M4.5 19.5l6-6"/></symbol>
     <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4"/><path d="M9 12h6M9 15.5h6"/></symbol>
   </svg>
 
@@ -149,6 +154,12 @@
               </section>
 
               <div class="actions" id="actions" hidden>
+                <!-- po przetworzeniu główną akcją jest pobranie wyników; ponawianie schodzi do drugiego rzędu -->
+                <button class="btn btn-primary" id="download-all" type="button" hidden>
+                  <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
+                  <span id="download-all-label">Pobierz wyniki (ZIP)</span>
+                </button>
+                <p class="unsaved-note" id="unsaved-note" hidden></p>
                 <button id="retry-failed" class="btn btn-primary" type="button" hidden>Ponów błędne</button>
                 <button id="submit-btn" class="btn btn-primary" type="submit">Przetwórz pliki</button>
                 <button id="cancel-btn" class="btn btn-line btn-block" type="button" hidden>Anuluj</button>
@@ -162,11 +173,6 @@
             <section class="summary" id="summary" aria-labelledby="summary-heading" hidden>
               <h2 class="sec" id="summary-heading">Wynik sprawy</h2>
               <dl class="tally" id="tally"></dl>
-              <button class="btn btn-line btn-block" id="download-all" type="button">
-                <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
-                <span id="download-all-label">Pobierz wszystkie JSON-y</span>
-              </button>
-              <p class="unsaved-note" id="unsaved-note" hidden></p>
             </section>
             </div>
           </section>
@@ -202,12 +208,12 @@
               <p>Przeciągnij pliki na pole „Dokumenty sprawy” albo wybierz je z dysku. Możesz dodać odwołanie, pełnomocnictwo, potwierdzenie przelewu i inne pisma. Kolejność na liście to kolejność przetwarzania.</p>
             </li>
             <li>
-              <h3>Kliknij „Przetwórz pliki”</h3>
+              <h3>Kliknij „Przetwórz”</h3>
               <p>System rozpozna typ każdego dokumentu i wyciągnie z niego dane. Przy dużych sprawach może to potrwać kilkanaście sekund.</p>
             </li>
             <li>
               <h3>Sprawdź dane i pobierz JSON</h3>
-              <p>Kliknij plik na liście, żeby zobaczyć jego dane w rubrykach. Przycisk „Pobierz” zapisuje plik JSON gotowy dla systemów urzędu.</p>
+              <p>Kliknij plik na liście, żeby zobaczyć jego dane w rubrykach. Przycisk „Pobierz” zapisuje plik JSON gotowy dla systemów urzędu, a „Pobierz ZIP” w kolumnie dokumentów zapisuje wyniki całej sprawy.</p>
             </li>
           </ol>
           <h3 class="help-sub">Co oznaczają statusy</h3>

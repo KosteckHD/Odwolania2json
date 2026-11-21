@@ -22,14 +22,14 @@ export function createPdfViewer(file, url, title) {
   element.className = "pdfv";
   element.innerHTML = `
     <div class="pdfv-bar">
-      <button type="button" class="pdfv-btn" data-act="prev" aria-label="Poprzednia strona">‹</button>
+      <button type="button" class="pdfv-btn" data-act="prev" aria-label="Poprzednia strona"><svg class="ic" aria-hidden="true"><use href="#i-prev"/></svg></button>
       <span class="pdfv-page-no" aria-live="polite">Strona –</span>
-      <button type="button" class="pdfv-btn" data-act="next" aria-label="Następna strona">›</button>
+      <button type="button" class="pdfv-btn" data-act="next" aria-label="Następna strona"><svg class="ic" aria-hidden="true"><use href="#i-next"/></svg></button>
       <span class="pdfv-sep"></span>
-      <button type="button" class="pdfv-btn" data-act="out" aria-label="Pomniejsz">−</button>
+      <button type="button" class="pdfv-btn" data-act="out" aria-label="Pomniejsz"><svg class="ic" aria-hidden="true"><use href="#i-minus"/></svg></button>
       <span class="pdfv-zoom" aria-live="polite">Szerokość</span>
-      <button type="button" class="pdfv-btn" data-act="in" aria-label="Powiększ">+</button>
-      <button type="button" class="pdfv-btn pdfv-full" data-act="full" aria-pressed="false" aria-label="Powiększ podgląd na cały obszar" title="Powiększ podgląd na cały obszar">⤢</button>
+      <button type="button" class="pdfv-btn" data-act="in" aria-label="Powiększ"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      <button type="button" class="pdfv-btn pdfv-full" data-act="full" aria-pressed="false" aria-label="Powiększ podgląd na cały obszar" title="Powiększ podgląd na cały obszar"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
     </div>
     <p class="pdfv-status">Wczytywanie podglądu…</p>
     <p class="sr-only pdfv-live" aria-live="polite"></p>

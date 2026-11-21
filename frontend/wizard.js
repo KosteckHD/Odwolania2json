@@ -302,7 +302,7 @@ function mountWizard(root) {
 
   const labelIn = input({ name: "label", placeholder: "np. Potwierdzenie odbioru", spellcheck: "true" });
   const idIn = input({ name: "id", class: "wiz-in wiz-mono", placeholder: "np. potwierdzenie_odbioru", "data-auto": "1" });
-  const posIn = area({ name: "positive", placeholder: "Potwierdzenie odbioru\nData odbioru" });
+  const posIn = area({ name: "positive", placeholder: "np. Potwierdzenie odbioru\nnp. Data odbioru" });
   const negIn = area({ name: "negative", rows: "2", placeholder: "np. Wezwanie do odbioru" });
   const minIn = input({ name: "minimum", type: "number", class: "wiz-in wiz-num", min: "1", step: "1", value: "1", inputmode: "numeric" });
   const regexIn = h("input", { type: "checkbox", name: "regex" });
@@ -402,7 +402,8 @@ function mountWizard(root) {
       row.el.remove();
       (rows[0]?.label ?? form.querySelector(".wiz-add")).focus();
       update();
-    } }, "×");
+    } });
+    del.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>';   // ta sama ikona co „Usuń z listy” w kolumnie plików
     row.el = h("div", { class: "wiz-frow" }, key, label, type,
       h("label", { class: "choice" }, list, h("span", { class: "choice-box", "aria-hidden": "true" }), h("span", { class: "wiz-list-txt", text: "lista" })),
       del,
