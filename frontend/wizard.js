@@ -33,26 +33,59 @@ const lines = (text) => clean(text).split("\n").map((l) => l.trim()).filter(Bool
 export function slugify(text) {
   return oneLine(text).toLowerCase()
     .replace(/[ąćęłńóśźż]/g, (c) => PL[c])
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^[0-9_]+|_+$/g, "");
 }
 
+/** Słowa frazy jako regex: znaki specjalne poprzedzone \, dowolne odstępy między słowami. */
+const phraseBody = (phrase) => oneLine(phrase).split(" ").filter(Boolean)
+  .map((w) => w.replace(/[\\.^$*+?{}[\]|()]/g, "\\$&")).join("\\s+");
+
 /** Fraza z dokumentu → regex Pythona bez rozróżniania wielkości liter, odporny na odstępy. */
 export function phraseToPattern(phrase) {
-  const words = oneLine(phrase).split(" ").filter(Boolean);
-  if (!words.length) return "";
-  return `(?i)${words.map((w) => w.replace(/[\\.^$*+?{}[\]|()]/g, "\\$&")).join("\\s+")}`;
+  const body = phraseBody(phrase);
+  return body ? `(?i)${body}` : "";
+}
+
+// Odczyt pola bez modelu (`fields:` w YAML): wartość stojąca po etykiecie w dokumencie.
+// Kształt wartości pasuje do normalizatora backendu, a jego wynik do typu w schemacie.
+const VALUE_RULES = {
+  text:   { normalize: "text",     value: String.raw`\S[^\r\n]*?`, tail: String.raw`[ \t\r]*$` },
+  number: { normalize: "amount",   value: String.raw`[+-]?[0-9]+(?:[^\S\r\n][0-9]{3})*(?:[,.][0-9]{2})?` },
+  date:   { normalize: "iso_date", value: String.raw`[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4}` },
+  digits: { normalize: "digits",   value: String.raw`[0-9](?:[0-9 \t-]*[0-9])?` },
+};
+
+/** Tekst z grupą (?P<value>…) to gotowy regex administratora, a nie etykieta. */
+export const isRawFieldPattern = (text) => String(text ?? "").includes("(?P<value>");
+
+/** Czy pole może mieć odczyt bez modelu: backend przyjmuje tylko pola skalarne, a tak/nie nie ma normalizatora. */
+export const supportsRule = (field) => !field.list && field.type in VALUE_RULES;
+
+/** Reguła { pattern, normalize } dla pola albo null, gdy pole nie ma etykiety lub jej nie obsługuje. */
+export function fieldRule(field) {
+  const source = clean(field.source).trim();
+  if (!source || !supportsRule(field)) return null;
+  const { normalize, value, tail = "" } = VALUE_RULES[field.type];
+  if (isRawFieldPattern(source)) return { pattern: source, normalize };
+  const label = phraseBody(source.replace(/[\s:.]+$/, "")) || phraseBody(source);
+  return { pattern: `(?im)${label}\\s*[:.]?\\s*(?P<value>${value})${tail}`, normalize };
 }
 
 /** Przybliżone sprawdzenie regexu Pythona silnikiem przeglądarki. Zwraca opis błędu albo null. */
 export function checkPythonRegex(source) {
+  try { toJsRegex(source); return null; } catch (e) { return e.message; }
+}
+
+/** Regex Pythona w przybliżeniu przełożony na RegExp (flagi z początku, grupy nazwane). Rzuca przy błędzie składni. */
+export function toJsRegex(source) {
   let flags = "";
   const body = source
     .replace(/^\(\?([aiLmsux]+)\)/, (_, f) => { flags = [...new Set(f.replace(/[aLux]/g, ""))].join(""); return ""; })
     .replace(/\(\?P</g, "(?<").replace(/\(\?P=(\w+)\)/g, "\\k<$1>")
     .replace(/\\A/g, "^").replace(/\\Z/g, "$");
-  try { new RegExp(body, flags); return null; } catch (e) { return e.message; }
+  return new RegExp(body, flags);
 }
 
 export function buildPatterns(text, regex) {
@@ -101,6 +134,8 @@ export const instructionsOf = (spec) => clean(spec.hints).trim() || defaultInstr
 
 const yamlSingle = (s) => `'${s.replace(/'/g, "''")}'`;
 const yamlDouble = (s) => JSON.stringify(s);   // JSON jest poprawnym skalarem YAML w cudzysłowie
+// PyYAML (YAML 1.1) czyta klucze yes/no/on/off/true/false/null jako bool lub null, więc te bierzemy w cudzysłów.
+const yamlKey = (k) => (/^(?:yes|no|on|off|true|false|null|y|n|~)$/i.test(k) ? yamlSingle(k) : k);
 
 export function buildYaml(spec) {
   const id = spec.id || "nowy_typ";
@@ -117,7 +152,15 @@ export function buildYaml(spec) {
     ...(positive.length ? positive.map((p) => `    - ${yamlSingle(p)}`) : ["    []"]),
   ];
   if (negative.length) out.push("  negative_patterns:", ...negative.map((p) => `    - ${yamlSingle(p)}`));
-  out.push(`  minimum_matches: ${spec.minimum}`, "options:");
+  out.push(`  minimum_matches: ${spec.minimum}`);
+  const rules = spec.fields.filter((f) => f.key).map((f) => [f.key, fieldRule(f)]).filter(([, rule]) => rule);
+  if (rules.length) {
+    out.push("fields:");
+    for (const [key, rule] of rules) {
+      out.push(`  ${yamlKey(key)}:`, `    pattern: ${yamlSingle(rule.pattern)}`, `    normalize: ${rule.normalize}`);
+    }
+  }
+  out.push("options:");
   if (label) out.push(`  label: ${yamlDouble(label)}`);
   out.push(`  llm_instructions: ${yamlDouble(instructionsOf(spec))}`);
   return `${out.join("\n")}\n`;
@@ -177,6 +220,11 @@ export function validate(spec, existingIds = []) {
     else if (seen.has(field.key)) err(`key:${i}`, `Pole ${no}: klucz „${field.key}” już jest na liście.`);
     seen.add(field.key);
     if (!oneLine(field.label)) err(`flabel:${i}`, `Pole ${no}: wpisz etykietę po polsku (podpowiada modelowi, co wpisać).`);
+    const rule = fieldRule(field);
+    if (rule && isRawFieldPattern(field.source)) {
+      const problem = checkPythonRegex(rule.pattern);
+      if (problem) warnings.push({ target: `source:${i}`, msg: `Pole ${no}: wzorzec odczytu wygląda na niepoprawny (${problem}). Backend sprawdzi go przy starcie.` });
+    }
   });
   return { errors, warnings };
 }
@@ -190,8 +238,8 @@ const EXAMPLE = {
   regex: false,
   minimum: 1,
   fields: [
-    { key: "numer", label: "Numer potwierdzenia", type: "text", list: false },
-    { key: "data_odbioru", label: "Data odbioru", type: "date", list: false },
+    { key: "numer", label: "Numer potwierdzenia", type: "text", list: false, source: "Numer potwierdzenia:" },
+    { key: "data_odbioru", label: "Data odbioru", type: "date", list: false, source: "Data odbioru:" },
     { key: "podpisane", label: "Czy dokument jest podpisany", type: "bool", list: false },
   ],
   hints: "Potwierdzenie odbioru dokumentów z nagłówkiem POTWIERDZENIE ODBIORU. Pole numer to numer potwierdzenia, pole data_odbioru to data odbioru. Pole podpisane: true, jeśli pod potwierdzeniem jest podpis.",
@@ -298,6 +346,9 @@ function mountWizard(root) {
       step(3, "Pola danych",
         "Co ma trafić do pliku JSON. Klucz to nazwa w JSON-ie, etykieta mówi modelowi, czego szukać. „Lista” oznacza wiele wartości, np. kilka numerów faktur.",
         fieldsBox, fieldsErr,
+        h("p", { class: "wiz-hint" },
+          "„Odczyt bez modelu” działa w trybie bez modelu językowego: system szuka w dokumencie podanej etykiety i bierze wartość, która stoi po niej (w tym samym albo następnym wierszu). Puste pole w tym trybie zostaje puste. Dla zaawansowanych: zamiast etykiety można wpisać wyrażenie regularne Pythona z grupą ",
+          h("code", { text: "(?P<value>…)" }), "."),
         h("button", { class: "btn btn-line wiz-add", type: "button", onclick: () => { addRow().key.focus(); update(); } }, "+ Dodaj pole")),
       step(4, "Wskazówki dla modelu",
         "Jak rozpoznać dokument i jak wypełniać pola. Gdy zostawisz puste, kreator wpisze wskazówki ogólne (widać je w podglądzie).",
@@ -330,11 +381,22 @@ function mountWizard(root) {
     const type = h("select", { class: "wiz-in", "aria-label": "Typ wartości" },
       Object.entries(FIELD_TYPES).map(([value, t]) => h("option", { value, text: t.label })));
     const list = h("input", { type: "checkbox", "aria-label": "Lista (wiele wartości)" });
+    const source = input({ class: "wiz-in wiz-src", id: `wiz-source-${n}`, spellcheck: "true" });
     key.value = data.key ?? "";
     label.value = data.label ?? "";
     type.value = data.type ?? "text";
     list.checked = !!data.list;
-    const row = { key, label, type, list };
+    source.value = data.source ?? "";
+    const row = { key, label, type, list, source };
+    const syncSource = () => {
+      source.disabled = !supportsRule({ type: type.value, list: list.checked });
+      source.placeholder = source.disabled
+        ? "niedostępny dla pól tak/nie i list"
+        : "etykieta w dokumencie, np. Numer umowy: (opcjonalnie)";
+    };
+    type.addEventListener("change", syncSource);
+    list.addEventListener("change", syncSource);
+    syncSource();
     const del = h("button", { class: "wiz-del", type: "button", "aria-label": "Usuń pole", title: "Usuń pole", onclick: () => {
       rows.splice(rows.indexOf(row), 1);
       row.el.remove();
@@ -343,7 +405,8 @@ function mountWizard(root) {
     } }, "×");
     row.el = h("div", { class: "wiz-frow" }, key, label, type,
       h("label", { class: "choice" }, list, h("span", { class: "choice-box", "aria-hidden": "true" }), h("span", { class: "wiz-list-txt", text: "lista" })),
-      del);
+      del,
+      h("div", { class: "wiz-fsrc" }, h("label", { class: "wiz-sublabel", for: source.id, text: "Odczyt bez modelu" }), source));
     label.addEventListener("input", () => { if (key.dataset.auto) key.value = slugify(label.value); });
     key.addEventListener("input", () => { key.dataset.auto = key.value ? "" : "1"; });
     rows.push(row);
@@ -359,7 +422,7 @@ function mountWizard(root) {
       negative: negIn.value,
       regex: regexIn.checked,
       minimum: Number(minIn.value),
-      fields: rows.map((r) => ({ key: r.key.value.trim(), label: r.label.value, type: r.type.value, list: r.list.checked })),
+      fields: rows.map((r) => ({ key: r.key.value.trim(), label: r.label.value, type: r.type.value, list: r.list.checked, source: r.source.value })),
       hints: hintsIn.value,
     };
   }
@@ -368,6 +431,7 @@ function mountWizard(root) {
     const [kind, i] = target.split(":");
     if (kind === "key") return rows[i]?.key;
     if (kind === "flabel") return rows[i]?.label;
+    if (kind === "source") return rows[i]?.source;
     return { label: labelIn, id: idIn, positive: posIn, negative: negIn, minimum: minIn }[kind] ?? null;
   }
 
