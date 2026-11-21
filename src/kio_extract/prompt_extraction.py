@@ -26,7 +26,10 @@ class PromptExtractor:
             "type": "object",
             "required": ["typ", "dane"],
             "additionalProperties": False,
-            "properties": {"typ": {"enum": [*context, "unknown"]}, "dane": {}},
+            "properties": {
+                "typ": {"enum": [*context, "unknown"]},
+                "dane": {"anyOf": [*[config.schema for config in configs], {"type": "null"}]},
+            },
             "if": {"properties": {"typ": {"const": "unknown"}}},
             "then": {"properties": {"dane": {"type": "null"}}},
             "else": {"properties": {"dane": {"type": "object"}}},

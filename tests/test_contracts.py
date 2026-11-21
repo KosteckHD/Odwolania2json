@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator
 from kio_extract.classifier import classify
 from kio_extract.contracts import DocumentConfig, ExtractedDocument, ExtractionResult, PageText
 from kio_extract.extraction_engine import resolve_extractor
+from kio_extract.prompt_extraction import PromptExtractor
 from kio_extract.schema_registry import load_configs
 
 
@@ -73,3 +74,21 @@ def test_plugin_is_resolved_from_configuration():
     config = DocumentConfig("test", {}, extractor=f"{__name__}:mock_extract")
     document = ExtractedDocument(Path("fixture.pdf"), (PageText(1, "tekst"),))
     assert resolve_extractor(config)(document, config).data == {"origin": 1}
+
+
+def test_fourth_class_instructions_and_schema_reach_llm(tmp_path):
+    schema = {"type": "object", "required": ["kod"], "additionalProperties": False,
+              "properties": {"kod": {"type": "string"}}}
+    config = DocumentConfig("receipt", schema, options={"llm_instructions": "Dokument RECEIPT ma pole kod."})
+
+    class Stub:
+        def extract_json(self, *, instructions, text, schema):
+            assert "Dokument RECEIPT ma pole kod." in instructions
+            assert "receipt" in schema["properties"]["typ"]["enum"]
+            return {"typ": "receipt", "dane": {"kod": "0001"}}
+
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Wybierz klasę na podstawie konfiguracji.", encoding="utf-8")
+    document = ExtractedDocument(Path("fixture.pdf"), (PageText(1, "RECEIPT 0001"),))
+    classification, data = PromptExtractor(Stub(), (config,), prompt).extract(document)
+    assert classification.doc_type == "receipt" and data == {"kod": "0001"}

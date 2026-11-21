@@ -1,9 +1,10 @@
 import json
 import os
-from http.client import HTTPConnection, HTTPException, HTTPSConnection
+from http.client import HTTPConnection, HTTPSConnection
 from urllib.parse import urlsplit
 
 from ..contracts import ConfigurationError, DocumentError, JsonObject
+from .rate_limit import RateLimitSettings, coordinator
 
 
 class ChatClient:
@@ -26,6 +27,8 @@ class ChatClient:
         self.connection = HTTPSConnection if url.scheme == "https" else HTTPConnection
         self.path = url.path.rstrip("/") + "/chat/completions"
         self.model = model
+        self.rate_limit = RateLimitSettings.from_environment()
+        self.last_usage = None
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if api_key:
             self.headers["Authorization"] = f"Bearer {api_key}"
@@ -35,10 +38,11 @@ class ChatClient:
         return cls(
             os.getenv("LLM_BASE_URL", "").strip(),
             os.getenv("LLM_MODEL", "").strip(),
-            os.getenv("LLM_API_KEY", "").strip(),
+            (os.getenv("LLM_API_KEY") or os.getenv("API_KEY", "")).strip(),
         )
 
     def extract_json(self, *, instructions: str, text: str, schema: JsonObject) -> JsonObject:
+        self.last_usage = None
         system = instructions + "\n\n## Schemat odpowiedzi\n" + json.dumps(schema, ensure_ascii=False)
         body = json.dumps(
             {
@@ -49,20 +53,17 @@ class ChatClient:
             },
             ensure_ascii=False,
         ).encode("utf-8")
-        connection = self.connection(self.hostname, self.port, timeout=60)
-        try:
-            connection.request("POST", self.path, body=body, headers=self.headers)
-            response = connection.getresponse()
-            if response.status != 200:
-                raise DocumentError("llm_http", f"API LLM zwróciło kod HTTP {response.status}")
-            payload = response.read()
-        except (OSError, HTTPException) as exc:
-            raise DocumentError("llm_connect", "Brak odpowiedzi ze skonfigurowanego API LLM") from exc
-        finally:
-            connection.close()
+        payload = coordinator.post(self.connection, self.hostname, self.port, self.path, body, self.headers, self.rate_limit)
 
         try:
-            choice = json.loads(payload)["choices"][0]
+            response = json.loads(payload)
+            if not isinstance(response, dict):
+                raise TypeError("expected object")
+            usage = response.get("usage")
+            if isinstance(usage, dict):
+                self.last_usage = {key: usage[key] for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+                                   if isinstance(usage.get(key), int)}
+            choice = response["choices"][0]
             if choice["finish_reason"] != "stop":
                 raise DocumentError("llm_incomplete", "API LLM nie ukończyło odpowiedzi JSON")
             result = json.loads(choice["message"]["content"])

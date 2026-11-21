@@ -30,6 +30,8 @@ def extract_pdf(path: Path, ocr: OCR | None = None) -> ExtractedDocument:
             continue
         if ocr is not None:
             recovered = ocr(path, page.page_number)
+            if recovered is None:
+                continue
             if _has_text(recovered):
                 pages[index] = PageText(page.page_number, recovered)
                 used_ocr = True

@@ -9,6 +9,8 @@ Wybierz typ na podstawie funkcji głównego dokumentu. Nagłówek, nadawca, form
 - `przelew` to bankowe potwierdzenie pojedynczego przelewu lub dokument wykazujący jego wykonanie. Wezwanie do zapłaty, instrukcja z numerem konta lub samo powołanie na wpłatę nie potwierdzają transakcji.
 - `unknown` oznacza dokument spoza dostępnych klas albo dokument bez podstaw do pewnej klasyfikacji. Zwróć wtedy dokładnie `{"typ":"unknown","dane":null}`.
 
+Konfiguracja może zawierać dodatkowe klasy. Dla każdej z nich skorzystaj z `options.llm_instructions`, aby rozpoznać jej główną funkcję i uzupełnić jej schemat. Wybierz klasę na podstawie treści dokumentu.
+
 ## Reguły wspólne
 
 Zwróć wyłącznie jeden obiekt JSON z kluczami `typ` i `dane`, bez komentarzy, Markdown i metadanych. Użyj dokładnych nazw, typów i zagnieżdżeń z odpowiedniego schematu. Uwzględnij wszystkie wymagane klucze. Dla braku danych użyj `null`, jeżeli pozwala na to schemat, oraz `[]` dla list bez wiarygodnie ustalonych elementów. Nie twórz pustych podmiotów ani osób. Zachowuj rozróżnienie ról i przypisuj dane tej samej osoby lub instytucji w obrębie jednego elementu listy. Brakujące identyfikatory pozostaw puste nawet wtedy, gdy rozpoznajesz podmiot.

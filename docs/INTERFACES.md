@@ -31,7 +31,7 @@ Punktem odniesienia jest [contracts.py](../src/kio_extract/contracts.py). Schema
 | `ClassificationResult` | `doc_type: str` dopuszcza nowe klasy i zastrzeżone `unknown`. `reason` to `llm`, `matched`, `no_match` lub `ambiguous`. |
 | `ExtractionResult` | `data: JsonObject`, `evidence: tuple[Evidence, ...] = ()`. Typy JSON to obiekty, listy, tekst, liczby skończone, bool i `None`. |
 | `Evidence` | `field_path: str` w formie `Odwolujacy.0.krs`, `page_number: int`, `method: str` opisująca pochodzenie, np. `regex`. Ścieżki odpowiadają wynikowym pozycjom list od zera. |
-| `OCR` | Callable `(source_path: Path, page_number: int) -> str`. Adapter docelowy powinien zgłaszać `DocumentError("ocr_failed", ...)` przy nieodwracalnej awarii. Parser oznacza strony z mniej niż 12 znakami alfanumerycznymi. |
+| `OCR` | Callable `(source_path: Path, page_number: int) -> str \| None`. `None` oznacza stronę całkowicie białą, a tekst to wynik OCR. Adapter zgłasza `DocumentError("ocr_failed", ...)` przy awarii. Parser kieruje strony z mniej niż 12 znakami alfanumerycznymi do OCR. |
 | `LLMClient` | `extract_json(*, instructions: str, text: str, schema: JsonObject) -> JsonObject`. Backend utrzymuje adapter. Tryb regułowy działa z `llm=None`. |
 
 Opcjonalna strategia regułowa eksportuje funkcję o tej sygnaturze. Funkcja dostaje jeden dokument i zwraca kompletną strukturę JSON dla jego klasy.
@@ -82,7 +82,7 @@ Do testu odwołania wymagającego słownika wczytaj swój YAML przez `load_confi
 | --- | --- |
 | Brak pola | Backend przyjmuje `None` lub pustą listę tam, gdzie pozwala schemat roboczy. Waliduje przed serializacją. |
 | Negatyw lub nierozstrzygnięta klasa | Klasyfikator zwraca `unknown`. CLI zapisuje plik w wybranym trybie negatywnym. |
-| Błąd jednego dokumentu | `DocumentError(code, message)` z komunikatem bez tekstu źródłowego i identyfikatorów. CLI raportuje ścieżkę i kod na stderr, kontynuuje i zwraca 1 po batchu. Obsługiwane kody obejmują `pdf_read`, `pdf_encrypted`, `ocr_required`, `invalid_output`, `output_write`. |
+| Błąd jednego dokumentu | `DocumentError(code, message)` z komunikatem bez tekstu źródłowego i identyfikatorów. CLI raportuje ścieżkę i kod na stderr, kontynuuje i zwraca 1 po batchu. Obsługiwane kody obejmują `pdf_read`, `pdf_encrypted`, `ocr_required`, `invalid_output`, `output_write` i `llm_rate_limit` po wyczerpaniu ponowień 429. |
 | Nieprawidłowa konfiguracja | `ConfigurationError` zatrzymuje batch przed zapisem. Kod CLI 2. Poprawnie zakończony batch ma kod 0. |
 
 W testach backendu zastępuj klienta LLM atrapą. W testach frontendu zastępuj endpoint odpowiedziami zawierającymi trzy statusy oraz błąd całego żądania.
