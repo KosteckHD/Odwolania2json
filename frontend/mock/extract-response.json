@@ -1,0 +1,96 @@
+{
+  "_opis": "Dane przykładowe panelu (syntetyczne, na podstawie wzorców UZP i docs/fixtures/extract-response.json). Atrapa dobiera wpis po nazwie pliku.",
+  "documents": [
+    {
+      "filename": "odwolanie.pdf",
+      "status": "ok",
+      "type": "odwolanie",
+      "data": {
+        "OdwolanieKIO": {
+          "data": "2025-10-13",
+          "czynnosc_dzien": "2025-10-01",
+          "czynnosc_powod_id": 4,
+          "czynnosc_opis": "Publikacja specyfikacji warunków zamówienia (SWZ)",
+          "miejscowosc": "Pruszków"
+        },
+        "Odwolujacy": [
+          {
+            "krs": "0000054588",
+            "nazwa": "STRABAG Sp. z o.o.",
+            "nip": null,
+            "regon": null,
+            "przez-pelnomocnika": 1,
+            "pelnomocnik": {
+              "imie_nazwisko": "Marcel Kielce",
+              "nazwa": "Kancelaria Radców Prawnych",
+              "mail": "info@prawnik.xy"
+            }
+          }
+        ],
+        "Zamawiajacy": [
+          {
+            "krs": null,
+            "nazwa": "Filharmonia Pomorska im. Ignacego Jana Paderewskiego",
+            "nip": "5540240549",
+            "regon": "000279077",
+            "prowadzacy_postepowanie": null
+          }
+        ],
+        "ZamowieniePubliczne": {
+          "numer_bzp": null,
+          "numer_postepowania": null,
+          "numer_ted": "641651-2025",
+          "tytul": "Wykonanie robót budowlanych oraz dostawa i montaż wyposażenia w ramach zadania, polegającego na przebudowie i rozbudowie Filharmonii Pomorskiej w Bydgoszczy"
+        }
+      }
+    },
+    {
+      "filename": "pelnomocnictwo.pdf",
+      "status": "ok",
+      "type": "pelnomocnictwo",
+      "data": {
+        "mocodawca": [
+          {
+            "data": {
+              "imie_nazwisko": null,
+              "krs": "0000244633",
+              "nazwa": "FAMBUD",
+              "nip": "8361772283",
+              "typ": "osoba_prawna"
+            },
+            "podpisujacy": [{ "imie_nazwisko": "Paweł Podolski" }]
+          }
+        ],
+        "pelnomocnicy": [{ "imie_nazwisko": "Krystyna Mazowiecka", "pesel": 85120133547 }]
+      }
+    },
+    {
+      "filename": "potwierdzenie_przelewu.pdf",
+      "status": "ok",
+      "type": "przelew",
+      "data": {
+        "przelew_bankowy": {
+          "data_operacji": "2025-10-09",
+          "kwota": 10000.0,
+          "na_rachunek": "60101010100081362231000000",
+          "numer_transakcji": null,
+          "tytul": "WPIS OD ODW., ZAM: ZESPÓŁ SZKÓŁ CENTRUM KSZTAŁCENIA ROLNICZEGO IM. KEN W HENRYKOWIE, ZSCKR/822/2025, BUDOWA DR. POŻAR.",
+          "z_rachunku": "508020546000005888744244"
+        }
+      }
+    },
+    {
+      "filename": "ogloszenie.pdf",
+      "status": "unknown",
+      "type": "unknown",
+      "data": null
+    },
+    {
+      "filename": "skan.pdf",
+      "status": "error",
+      "type": null,
+      "data": null,
+      "error": { "code": "ocr_required", "message": "Dokument wymaga odczytu OCR." }
+    }
+  ]
+}
