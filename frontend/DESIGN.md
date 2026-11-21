@@ -55,7 +55,7 @@ Identyfikatory (NIP, KRS, REGON, PESEL), daty i numery rachunków są wpisane w 
 
 ## Układ
 
-Zwijany pasek nawigacji (232 px / 68 px, na telefonie szuflada), górny pasek z trzema krokami, kolumna „Dokumenty sprawy” i arkusz wybranego dokumentu. Poniżej 1180 px arkusz schodzi pod listę.
+Menu wysuwane z boku na każdym ekranie (przycisk ☰ w górnym pasku, zamykanie kliknięciem obok, wyborem albo Esc), górny pasek z trzema krokami, kolumna „Dokumenty sprawy” i arkusz wybranego dokumentu. Poniżej 1180 px arkusz schodzi pod listę.
 
 ## Ruch
 

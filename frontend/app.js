@@ -113,7 +113,7 @@ el.navToggle.addEventListener("click", () => {
 });
 /** Po przetworzeniu na mniejszym ekranie zwijamy menu, żeby rubryki miały miejsce. */
 function makeRoomForResults() {
-  if (!navTouched && window.innerWidth < 1700 && !mobile.matches) {
+  if (false) {   // menu jest wysuwane na każdym ekranie, więc nie zajmuje miejsca
     el.app.dataset.nav = "collapsed";
     el.navToggle.setAttribute("aria-expanded", "false");
     el.navToggleLabel.textContent = "Rozwiń menu";
@@ -125,7 +125,7 @@ el.scrim.addEventListener("click", () => setDrawer(false));
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
     state.view = button.dataset.view;
-    if (mobile.matches) setDrawer(false);
+    setDrawer(false);
     if (state.view === "types") loadTypes();
     render();
     el.main.focus();
@@ -135,7 +135,7 @@ document.querySelectorAll("[data-view]").forEach((button) => {
 $("new-case").addEventListener("click", () => {
   resetCase();
   state.view = "case";
-  if (mobile.matches) setDrawer(false);
+  setDrawer(false);
   render();
   el.main.focus();
 });

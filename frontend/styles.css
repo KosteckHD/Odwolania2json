@@ -426,3 +426,30 @@ main { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .pdfv-stage[data-zoomed="true"] { overflow: auto; place-items: start center; padding: 12px; }
 .sheet-body[data-full="true"] { grid-template-columns: minmax(0, 1fr); }
 .sheet-body[data-full="true"] .fields-pane, .sheet-body[data-full="true"] .splitter { display: none; }
+
+/* ---------- menu wysuwane z boku na każdym ekranie ----------
+   Pasek nie zajmuje stale miejsca: otwiera się przyciskiem ☰ nad treścią,
+   zamyka kliknięciem obok, wyborem pozycji albo klawiszem Esc. */
+.app, .app[data-nav="collapsed"] { grid-template-columns: minmax(0, 1fr); }
+.rail {
+  position: fixed; left: 0; top: 0; bottom: 0; z-index: 40; width: min(300px, 86vw); height: auto;
+  transform: translateX(-100%); visibility: hidden;
+  transition: transform .22s var(--ease), visibility 0s linear .22s;
+  box-shadow: 4px 0 24px rgba(27, 28, 32, .18);
+}
+.app[data-drawer="open"] .rail { transform: none; visibility: visible; transition: transform .22s var(--ease), visibility 0s; }
+.app[data-drawer="open"] .rail-scrim { display: block; position: fixed; inset: 0; z-index: 30; background: rgba(27, 28, 32, .4); }
+.rail-toggle { display: none; }
+.app[data-nav="collapsed"] .rail-name, .app[data-nav="collapsed"] .rail-label { display: inline; }
+.app[data-nav="collapsed"] .rail-head { flex-direction: row; padding: 10px 8px 10px 14px; }
+.app[data-nav="collapsed"] .rail-item { justify-content: flex-start; padding: 0 12px; }
+.app[data-nav="collapsed"] .rail-foot { display: block; }
+.menu-btn {
+  display: flex; justify-content: center; flex: none; width: 40px; height: 40px; margin-left: -8px;
+  color: var(--brand); border: 1px solid var(--form-soft); background: var(--sheet);
+}
+.menu-btn:hover { background: var(--paper); border-color: var(--brand); }
+.brand-mini { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: var(--brand); white-space: nowrap; }
+.brand-mini-mark { display: grid; place-items: center; width: 26px; height: 26px; background: var(--brand); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .03em; }
+.topbar-sep { width: 1px; height: 24px; background: var(--rule); }
+@media (max-width: 640px) { .brand-mini-text, .topbar-sep { display: none; } }
