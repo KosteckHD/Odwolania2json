@@ -12,7 +12,7 @@ def test_anthropic_sends_one_request_and_parses_json(monkeypatch):
 
     class Connection:
         def __init__(self, host, port, timeout):
-            assert host == "example.com" and timeout == 60
+            assert host == "example.com" and timeout == 90.0
 
         def request(self, method, path, *, body, headers):
             calls.append((method, path, json.loads(body), headers))

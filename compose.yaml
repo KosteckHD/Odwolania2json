@@ -1,27 +1,31 @@
+# KIOdczyt (Odwołania2JSON) — uruchomienie w Dockerze.
+# Na serwerze oceny repozytorium leży bezpośrednio w /opt/solution (tam też input/, output/, .env i RUN.md).
+#
+#   docker compose build batch          # raz, przed oceną (obraz z zależnościami)
+#   docker compose run --rm batch       # przetwarza input/ -> output/ i kończy się (komenda z RUN.md)
+#   docker compose up -d api            # panel WWW na porcie 8000 (startuje sam po restarcie serwera)
+
+x-model-env: &model-env
+  # Konfiguracja modelu i klucz API z pliku .env obok tego pliku (wzór: .env.example).
+  env_file:
+    - path: .env
+      required: false
+
 services:
   batch:
     build: .
+    image: kiodczyt:latest
+    <<: *model-env
     volumes:
       - ./input:/app/input:ro
       - ./output:/app/output
-    environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-chat}
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-${API_KEY:-}}
-      LLM_REQUEST_INTERVAL_SECONDS: ${LLM_REQUEST_INTERVAL_SECONDS:-1}
-      LLM_MAX_429_RETRIES: ${LLM_MAX_429_RETRIES:-4}
-      LLM_MAX_RETRY_WAIT_SECONDS: ${LLM_MAX_RETRY_WAIT_SECONDS:-60}
+    restart: "no"
+
   api:
     build: .
+    image: kiodczyt:latest
+    <<: *model-env
     command: ["python", "-m", "uvicorn", "--app-dir", "src", "kio_extract.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "127.0.0.1:8000:8000"
-    environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-chat}
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-${API_KEY:-}}
-      LLM_REQUEST_INTERVAL_SECONDS: ${LLM_REQUEST_INTERVAL_SECONDS:-1}
-      LLM_MAX_429_RETRIES: ${LLM_MAX_429_RETRIES:-4}
-      LLM_MAX_RETRY_WAIT_SECONDS: ${LLM_MAX_RETRY_WAIT_SECONDS:-60}
+      - "8000:8000"
+    restart: unless-stopped

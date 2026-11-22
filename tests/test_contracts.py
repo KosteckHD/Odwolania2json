@@ -92,3 +92,27 @@ def test_fourth_class_instructions_and_schema_reach_llm(tmp_path):
     document = ExtractedDocument(Path("fixture.pdf"), (PageText(1, "RECEIPT 0001"),))
     classification, data = PromptExtractor(Stub(), (config,), prompt).extract(document)
     assert classification.doc_type == "receipt" and data == {"kod": "0001"}
+
+
+def test_raw_llm_response_is_dumped_only_when_requested(tmp_path, monkeypatch):
+    schema = {"type": "object", "required": ["kod"], "additionalProperties": False,
+              "properties": {"kod": {"type": "string"}}}
+    config = DocumentConfig("receipt", schema)
+
+    class Stub:
+        def extract_json(self, *, instructions, text, schema):
+            return {"typ": "receipt", "dane": {"kod": "0001"}}
+
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Prompt.", encoding="utf-8")
+    document = ExtractedDocument(Path("sprawa_01/odwolanie.pdf"), (PageText(1, "RECEIPT 0001"),))
+    extractor = PromptExtractor(Stub(), (config,), prompt)
+
+    monkeypatch.delenv("LLM_RAW_DUMP_DIR", raising=False)
+    extractor.extract(document)
+    assert not (tmp_path / "raw").exists()
+
+    monkeypatch.setenv("LLM_RAW_DUMP_DIR", str(tmp_path / "raw"))
+    extractor.extract(document)
+    dumped = tmp_path / "raw" / "sprawa_01__odwolanie.json"
+    assert json.loads(dumped.read_text(encoding="utf-8")) == {"typ": "receipt", "dane": {"kod": "0001"}}

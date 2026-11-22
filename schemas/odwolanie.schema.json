@@ -61,7 +61,7 @@
       "additionalProperties": false,
       "required": ["numer_bzp", "numer_postepowania", "numer_ted", "tytul"],
       "properties": {
-        "numer_bzp": {"type": ["string", "null"]},
+        "numer_bzp": {"type": ["string", "null"], "x-normalizer": "bzp"},
         "numer_postepowania": {"type": ["string", "null"]},
         "numer_ted": {"type": ["string", "null"], "x-normalizer": "ted"},
         "tytul": {"type": ["string", "null"]}

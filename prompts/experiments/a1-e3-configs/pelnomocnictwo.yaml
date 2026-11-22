@@ -1,0 +1,17 @@
+id: pelnomocnictwo
+schema: pelnomocnictwo.schema.json
+classification:
+  positive_patterns:
+    - '(?im)^\s*pełnomocnictwo(?:\s+(?:szczególne|procesowe|ogólne|substytucyjne))?\s*$'
+    - '(?i)udziel(?:am|amy|a)\s+(?:niniejszym\s+)?pełnomocnictwa'
+    - '(?i)niniejszym\s+upoważni(?:am|amy|a)\b'
+    - '(?ims)\A(?=.*^\s*(?:mocodawca|udzielający pełnomocnictwa)\b)(?=.*^\s*pełnomocni(?:k|cy)\b)'
+    - '(?ims)\A(?=.*^\s*pełnomocni(?:k|cy)\b)(?=.*\b(?:upoważni(?:am|amy|a)|do udzielania pełnomocnictw|ustanawia\w* pełnomocnikiem)\b)'
+  negative_patterns:
+    - '(?im)^\s*odwołanie\s*$'
+  minimum_matches: 1
+options:
+  llm_instructions: |
+    - Mocodawca udziela upoważnienia. Podpisujący reprezentuje konkretnego mocodawcę. Pełnomocnik otrzymuje upoważnienie. Powiąż każdą osobę z rolą wynikającą z treści i zachowaj odrębne elementy dla wielu podmiotów.
+    - Dla osoby prawnej użyj `typ: osoba_prawna` i `null` w polu `imie_nazwisko` mocodawcy. Dla osoby fizycznej użyj `typ: osoba_fizyczna`. Jeśli nie można ustalić typu, użyj `null`. Imiona i nazwiska pełnomocników, osób podpisujących i mocodawcy będącego osobą fizyczną zapisuj w mianowniku, jeżeli można je wiarygodnie ustalić.
+    - `pesel` dotyczy pełnomocnika wskazanego przy tym polu. Użyj liczby całkowitej dopiero po rozpoznaniu jego pełnych 11 cyfr. Brak pewnego numeru zwróć jako `null`.

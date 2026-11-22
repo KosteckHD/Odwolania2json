@@ -1,0 +1,21 @@
+id: przelew
+schema: przelew.schema.json
+classification:
+  positive_patterns:
+    - '(?im)^\s*(?:potwierdzenie\s+(?:(?:wykonania|realizacji|zlecenia)\s+)?(?:przelewu|transakcji|operacji)|dowód\s+przelewu)\b'
+    - '(?im)^\s*data\s+(?:operacji|transakcji)\b'
+    - '(?im)^\s*kwota\b'
+    - '(?im)^\s*(?:rachunek(?:\s+(?:nadawcy|odbiorcy|obciążany))?|(?:z|na) rachun(?:ek|ku)|numer rachunku)\b'
+  minimum_matches: 2
+fields:
+  przelew_bankowy.data_operacji:
+    pattern: '(?im)^\s*data[ \t]+operacji[ \t:]*(?P<value>[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4})\b'
+    normalize: iso_date
+  przelew_bankowy.kwota:
+    pattern: '(?im)^\s*kwota[ \t:]*(?P<value>[0-9]+(?:[^\S\r\n][0-9]{3})*(?:[,.][0-9]{2})?)[^\S\r\n]*(?:PLN)?[^\S\r\n]*$'
+    normalize: amount
+options:
+  llm_instructions: |
+    - `z_rachunku` jest rachunkiem obciążanym, a `na_rachunek` rachunkiem uznawanym. Kierunek wynika z etykiet i ról w dokumencie. Jeżeli układ kolumn nie pozwala ustalić strony, użyj `null` w nierozstrzygniętym polu.
+    - `data_operacji` oznacza datę wykonania lub operacji przelewu. Oddziel ją od daty wydruku i daty zlecenia. `kwota` to kwota danego przelewu w postaci liczby JSON, z kropką dziesiętną i bez waluty lub separatorów tysięcy. Opłata i saldo to odrębne kwoty.
+    - `numer_transakcji` to identyfikator operacji nadany przez bank, podany pod etykietą taką jak „Nr ref.”, „Numer referencyjny”, „ID transakcji”, „Numer operacji” lub „Nr transakcji”. Przepisz go dosłownie, także wtedy, gdy ten sam ciąg występuje w tytule przelewu. Gdy dokument nie podaje takiego identyfikatora, użyj `null`. `tytul` to opis przelewu podany przez nadawcę. W samym tytule może występować sygnatura sprawy lub numer postępowania.

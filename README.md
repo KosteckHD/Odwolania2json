@@ -1,82 +1,112 @@
-# Odwołania2JSON
+# KIOdczyt (Odwołania2JSON)
 
-Odwołania2JSON przetwarza sprawy KIO partiami. W trybie konkursowym jeden [system prompt](prompts/system_pl.md) prowadzi model przez klasyfikację i ekstrakcję w jednym wywołaniu na PDF. CLI odczytuje tekst, dołącza aktualne schematy i słownik powodów odwołania, waliduje odpowiedź, a do `output/` zapisuje pola UZP. Tryb regułowy służy jako lokalna baza porównawcza.
+**PDF-y sprawy odwoławczej KIO → JSON w formacie Urzędu Zamówień Publicznych.** KIOdczyt rozpoznaje dokument
+(odwołanie, pełnomocnictwo, potwierdzenie przelewu albo dokument spoza tych klas), wyciąga dane i zapisuje je do
+`output/<sprawa>/<nazwa pliku>.json`. Urzędnik może przejrzeć i poprawić wynik w panelu WWW, gdzie przy każdym polu
+widać, skąd pochodzi w dokumencie.
+
+| Test UZP | Walidacja UZP | Inny układ dokumentów | Model |
+|---|---|---|---|
+| **F1 1,0000** | **F1 1,0000** | **F1 1,0000** | Qwen3.5 9B, open source, UE |
+
+Szczegóły pomiaru, metoda i ograniczenia: [docs/WYNIKI.md](docs/WYNIKI.md).
+
+![Panel KIOdczyt: formularz z polami i źródłem w PDF-ie](docs/obrazy/panel.jpg)
 
 ## Uruchomienie
 
-Wymagany jest Python 3.13 lub nowszy. Utwórz środowisko i zainstaluj zależności.
+**Serwer oceny UZP (Azure VM):** projekt leży w `/opt/solution`, komenda oceny jest w [RUN.md](RUN.md):
+
+```bash
+docker compose run --rm batch
+```
+
+Instrukcja wdrożenia i testu: [deploy/VM.md](deploy/VM.md).
+
+**Lokalnie (Windows, Python 3.13+):**
 
 ```powershell
 py -3.13 -m venv .venv
-.venv/Scripts/python.exe -m pip install -r requirements.txt
-.venv/Scripts/python.exe main.py
-.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
-.venv/Scripts/python.exe -m pytest -q
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+copy .env.example .env      # wpisz klucz po LLM_API_KEY=
+.\przetworz.bat             # input\<sprawa>\*.pdf  ->  output\<sprawa>\*.json
+.\start.bat                 # panel WWW pod http://127.0.0.1:8000/
 ```
 
-Na Linuksie używaj `python3.13 -m venv .venv` i `.venv/bin/python`. Umieść np. `pismo.pdf` pod `input/case1/`. Wynik pojawi się w `output/case1/pismo.json`. Argumenty `--input` i `--output` wybierają inne katalogi. `--negative-output empty_object` zmienia domyślny wynik o długości 0 bajtów na `{}`. CLI zgłasza strony wymagające OCR i przechodzi do następnego pliku. Uruchomienie na świeżym `output/` ułatwia oddzielenie bieżących wyników od poprzednich przebiegów.
+Na Linuksie: `python3.13 -m venv .venv`, `.venv/bin/python -m pip install -r requirements.txt`, `./przetworz.sh`, `./start.sh`.
+`python main.py --rules` działa bez modelu (tryb regułowy z konfiguracji YAML).
+
+## Jak to działa
+
+```
+PDF ─► tekst stron (pypdf) ─┬─► model (Qwen3.5 9B): typ + dane wg schematu ─► reguły po modelu (YAML) ─► normalizacja ─► walidacja schematu ─► JSON
+                            └─► strony bez tekstu: obraz strony do tego samego modelu
+                 błąd usługi modelu po ponowieniach ─► wynik z reguł YAML; dokument spoza klas ─► {}
+```
+
+- **Jeden model, jedno zapytanie na dokument.** Prompt [prompts/system_pl.md](prompts/system_pl.md) opisuje rolę
+  każdego pola (a nie konkretną etykietę w piśmie), więc działa też przy innym układzie dokumentu.
+- **Reguły po modelu** (sekcje `postprocess:` w [configs/documents](configs/documents)) uzupełniają tylko puste pola,
+  ujednolicają pisownię imion z dokumentem, wpisują opis powodu ze słownika i rozstrzygają powód odwołania,
+  gdy tekst zaskarżonej czynności jest jednoznaczny.
+- **Normalizacja i zgodność z UZP:** daty ISO, kwoty jako liczby, rachunek jak w dokumencie (z „PL”),
+  numery TED i BZP w formacie wzorców, imiona w mianowniku, dokument spoza klas = plik z samym `{}`.
+- **Odporność:** równoległe zapytania (`LLM_CONCURRENCY`), ponawianie błędów 429/5xx, wynik awaryjny z reguł,
+  plik wyniku dla każdego PDF-u.
+
+## Model i dane
+
+- **Qwen3.5 9B** (Alibaba Qwen, licencja Apache 2.0), dostarczany przez **HostYourAI B.V.** (Holandia),
+  przetwarzanie w centrach danych w UE; API zgodne z OpenAI Chat Completions. Ten sam model czyta skany z obrazu,
+  więc rozwiązanie używa jednego modelu.
+- Konfiguracja w `.env` (wzór: [.env.example](.env.example)): `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`,
+  `LLM_EXTRA_BODY` (wyłączenie trybu „myślenia”), tempo i ponowienia (`LLM_CONCURRENCY`, `LLM_REQUEST_INTERVAL_SECONDS`,
+  `LLM_MAX_429_RETRIES`, `LLM_MAX_RETRY_WAIT_SECONDS`, `LLM_TIMEOUT_SECONDS`), skany (`SCAN_MODE`, `SCAN_MAX_PAGES`).
+  Klucza nie ma w repozytorium.
+
+## Nowy typ dokumentu bez zmiany kodu
+
+Typ dokumentu to dwa pliki: `configs/documents/<typ>.yaml` (rozpoznawanie, wskazówki dla modelu, opcjonalne reguły)
+i `schemas/<typ>.schema.json` (pola wyniku). Można je dodać ręcznie albo w panelu: menu ☰ → „Typy dokumentów” →
+kreator, który zapisuje oba pliki na serwerze; serwer sprawdza je regułami ze startu i od razu zaczyna rozpoznawać
+nowy typ, a panel buduje dla niego formularz ze schematu. Opis: [docs/ADD_DOCUMENT_TYPE.md](docs/ADD_DOCUMENT_TYPE.md).
+
+![Kreator nowego typu dokumentu](docs/obrazy/kreator.jpg)
 
 ## Panel WWW
 
-Panel do przetwarzania spraw w przeglądarce jest serwowany przez to samo API, pod jednym adresem. Po jednorazowej instalacji `.venv` (sekcja „Uruchomienie”) uruchom w katalogu repozytorium:
+Panel (folder [frontend](frontend), bez budowania i zależności) działa pod tym samym adresem co API:
+wgrywanie spraw, przetwarzanie plik po pliku, formularz z kratkami, podgląd PDF z podświetleniem źródła pola,
+poprawki z cofaniem, wstawianie zaznaczonego tekstu z PDF-u, sumy kontrolne NIP/REGON/PESEL/rachunku,
+eksport JSON i ZIP sprawy, kreator typów. Opis: [frontend/README.md](frontend/README.md).
+API: `POST /api/extract`, `GET`/`POST /api/document-types` ([kontrakt](docs/INTERFACES.md)).
+
+## Ewaluacja
 
 ```powershell
-.\start.bat
+.venv\Scripts\python.exe evaluation\experiment.py --name proba --split validation --data <hacknation-2026>\dane --key-from LLM_API_KEY
+.venv\Scripts\python.exe evaluation\evaluate.py --manifest evaluation\manifest.json --data <dane> --predictions <output> --split validation --output raport.json
 ```
 
-Skrypt startuje serwer na http://127.0.0.1:8000/ i otwiera tam przeglądarkę. Ctrl+C zatrzymuje serwer. Inny port ustawia zmienna `PORT`, a `NO_BROWSER=1` wyłącza otwieranie przeglądarki. Na Linuksie i macOS służy do tego `./start.sh`. Gdy `.env` zawiera konfigurację modelu, API korzysta z LLM, a panel pokazuje nazwę modelu przy wyniku. Bez niej działa tryb regułowy. Ten sam serwer wystawia `docker compose up --build api`. Opis panelu jest w [frontend/README.md](frontend/README.md). Nowy typ dokumentu administrator dodaje w panelu (menu ☰ → „Typy dokumentów”): kreator zapisuje YAML i schemat na serwerze, który od razu zaczyna go rozpoznawać, bez restartu ([docs/ADD_DOCUMENT_TYPE.md](docs/ADD_DOCUMENT_TYPE.md)).
+`evaluate.py` liczy F1 według zasad UZP (bez wywołań modelu), `experiment.py` robi pełny przebieg na podziale z
+[evaluation/manifest.json](evaluation/manifest.json) i dopisuje wynik do tabeli. Zestaw odporności na inny układ:
+`evaluation/layout_variants.py`. Dzienniki rund poprawek: [docs/eksperymenty](docs/eksperymenty).
 
-## Tryb LLM
+Testy: `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`, potem `.venv\Scripts\python.exe -m pytest -q`
+(backend) i `node --test frontend/tests/` (panel).
 
-Ustaw `LLM_BASE_URL` na bazę zgodnego API Chat Completions, np. adres zakończony `/v1`, `LLM_MODEL` na nazwę obsługiwaną przez ten endpoint i `LLM_API_KEY` w środowisku procesu lub w lokalnym `.env`. Obsługiwana jest także nazwa `API_KEY`. Zmienne procesu mają pierwszeństwo przed `.env`. Endpoint Chat Completions musi obsługiwać `response_format: json_object`. Wywołanie `--llm` przesyła tekst stron PDF do skonfigurowanego API. Do danych konkursowych wybierz otwarty model i zweryfikuj, że firma oraz serwery API są w UE/EOG. [Wymagania UZP](https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026#6-spos%C3%B3b-testowania-i-walidacji)
+## Struktura repozytorium
 
-```powershell
-.venv/Scripts/python.exe main.py --llm --input ./input --output ./output
-```
+| Ścieżka | Zawartość |
+|---|---|
+| `main.py`, `src/kio_extract/` | CLI, przetwarzanie, klient modelu, reguły, API |
+| `configs/documents/`, `schemas/` | typy dokumentów: konfiguracja YAML i schematy JSON |
+| `prompts/` | prompt systemowy modelu |
+| `frontend/` | panel WWW |
+| `evaluation/` | ewaluator, eksperymenty, manifest podziału danych |
+| `deploy/`, `RUN.md`, `compose.yaml`, `Dockerfile` | wdrożenie na serwer oceny |
+| `docs/` | wyniki, kontrakt, dodawanie typów, dzienniki eksperymentów, [archiwum](docs/archiwum) |
+| `tests/` | testy backendu |
 
-Model dostaje instrukcje i schematy w wiadomości `system`, a tekst stron w `user`. Zwraca `typ` i `dane`. Dla `unknown` CLI stosuje tryb wyniku negatywnego, a dla rozpoznanej klasy zapisuje zwalidowane `dane`. Do porównania wersji użyj `--prompt ścieżka.md` i oddzielnych katalogów `--output` przy tym samym modelu i zbiorze. Reguły klasy można dopisać w jej YAML jako `options.llm_instructions`.
-
-Przy dużych zbiorach żądania w jednym procesie są szeregowane i domyślnie dzieli je co najmniej sekunda. Odpowiedź HTTP 429 powoduje ponowienie, z uwzględnieniem nagłówka `Retry-After` albo rosnącego czasu oczekiwania. Tempo i limity ustawiają zmienne `LLM_REQUEST_INTERVAL_SECONDS` (domyślnie `1`), `LLM_MAX_429_RETRIES` (`4`) oraz `LLM_MAX_RETRY_WAIT_SECONDS` (`60`). Ostatni parametr ogranicza pojedyncze oczekiwanie. Po wyczerpaniu ponowień dokument otrzymuje błąd `llm_rate_limit`, a batch przechodzi do następnego pliku. Ponowienia 429 mogą zwiększyć liczbę żądań na PDF.
-
-Odstęp dopasuj do limitów żądań oraz tokenów konkretnego konta i modelu. Koordynacja obejmuje wątki jednego procesu. Jednoczesne osobne procesy CLI, pracownicy serwera lub instancje kontenerów mają oddzielne limity, więc dla wspólnego klucza należy uwzględnić ich łączny ruch.
-
-Do natywnego Claude Messages ustaw `LLM_PROVIDER=anthropic`, `LLM_BASE_URL=https://api.anthropic.com/v1`, identyfikator Sonnet w `LLM_MODEL` oraz klucz w `LLM_API_KEY` lub `API_KEY`. Adapter używa strukturalnej koperty JSON, a pełny schemat dokumentu waliduje lokalnie. Próby deweloperskie Claude Sonnet na danych syntetycznych zostały wykonane. Warunki UZP dotyczące otwartego modelu oraz lokalizacji dostawcy i serwerów opisano w dokumentacji projektu.
-
-API uruchom przez `.venv/Scripts/python.exe -m uvicorn --app-dir src kio_extract.api:create_app --factory --host 127.0.0.1 --port 8000`. Gdy `LLM_MODEL` jest ustawiony, API korzysta z LLM. W innym przypadku działa tryb regułowy. `POST /api/extract` przyjmuje pola `files` według [kontraktu](docs/INTERFACES.md#api-dla-frontendu).
-
-Do integracji frontendu na syntetycznych PDF-ach uruchom `.venv/Scripts/python.exe tests/support/fake_llm_server.py` w osobnym terminalu. W terminalu API ustaw `$env:LLM_PROVIDER='chat'`, `$env:LLM_BASE_URL='http://127.0.0.1:8765/v1'` i `$env:LLM_MODEL='fixture'`, a następnie uruchom API podaną komendą. Atrapa rozpoznaje syntetyczny tekst potwierdzenia przelewu i zwraca puste pola zgodne ze schematem.
-
-OCR wymaga programu Tesseract dostępnego w `PATH` oraz danych językowych `pol`. Strony bez wystarczającej warstwy tekstowej są renderowane przez pypdfium2 i przekazywane do OCR.
-
-## Lokalny pomiar
-
-Manifest `evaluation/manifest.json` zawiera podział spraw UZP 01–42 na rozwój, 43–54 na walidację oraz 55–60 na końcowy test. Ewaluator porównuje wcześniej zapisane wyniki i nie wywołuje modelu. Przyjmuje lokalną kopię danych UZP oraz katalog wynikowy o takiej samej strukturze jak katalog danych.
-
-Wyniki eksperymentów i ograniczenia pomiaru opisuje [porównanie modeli](docs/MODEL_COMPARISON.md). Przykładowy sposób rozszerzenia konfiguracji opisuje [instrukcja dodania klasy](docs/ADD_DOCUMENT_TYPE.md).
-
-```powershell
-.venv/Scripts/python.exe evaluation/evaluate.py --manifest evaluation/manifest.json --data .local/uzp-reference/dane --predictions .local/batch-uzp --split validation --output artifacts/baseline.json
-```
-
-Raport opisuje lokalny micro-F1, wyniki według pól i klas, macierz klasyfikacji oraz błędy. W obrębie list obiektów dopasowuje jednoznaczne identyfikatory, a pozostałe wartości porównuje jako wielozbiory. Ta metryka służy do porównywania wersji projektu.
-
-Wynik pomiaru LLM można opatrzyć argumentami `--model`, `--revision` i `--prompt-version`, aby kolejne raporty wskazywały użyty model oraz wersję kodu i prompta.
-
-Przy ponawianiu przetwarzania użyj opcji CLI `--report artifacts/run.json`, a następnie przekaż evaluatorowi `--run-report artifacts/run.json`. Raport przechowuje status i skrót zapisanego pliku. Evaluator traktuje błąd dokumentu, brak wpisu oraz zmieniony wynik jako błąd, również gdy w `output/` znajduje się plik z wcześniejszego przebiegu. Raport powstaje po zakończeniu batcha, dlatego dla każdego nowego uruchomienia używaj odrębnej ścieżki raportu.
-
-Kontenery można uruchomić przez `docker compose run --build --rm batch` lub `docker compose up --build api`. Obraz instaluje Tesseract i pakiet języka polskiego. Przetwarzanie batcha przez LLM wymaga argumentu `--llm`, np. `docker compose run --build --rm batch python main.py --llm`.
-
-## Tryb regułowy
-
-Strategia konfigurowalna przyjmuje YAML w `configs/documents/` i JSON Schema w `schemas/`. Dodanie klasy z istniejącą strategią regex nie wymaga zmiany Pythona. Własne zestawy można przekazać przez `--configs` i `--schemas`. Format konfiguracji i przykład testu opisuje [kontrakt](docs/INTERFACES.md).
-
-Zależności wykonawcze działają lokalnie na CPU. Ich licencje to BSD-3-Clause dla `pypdf` oraz MIT dla PyYAML i `jsonschema`. [pypdf](https://pypi.org/project/pypdf/6.18.0/), [PyYAML](https://pypi.org/project/PyYAML/6.0.3/), [jsonschema](https://pypi.org/project/jsonschema/4.26.0/)
-
-## Start zespołu
-
-- [Podział frontend/backend, własność plików i zależności](docs/WORK_SPLIT_2.md)
-- [Kontrakt API](docs/INTERFACES.md#api-dla-frontendu) i [przykładowa odpowiedź do atrapy](docs/fixtures/extract-response.json)
-- [Harmonogram 22 godzin i integracja](docs/INTEGRATION_PLAN.md)
-- [Tablica zadań](docs/WORKBOARD.md)
-- [Zweryfikowane wymagania i pytania do UZP](docs/OPEN_QUESTIONS.md)
-- Prompty startowe dla [frontendu](docs/prompts/FRONTEND.md) i [backendu](docs/prompts/BACKEND.md)
+Zależności (wszystkie open source, działają na CPU): pypdf, PyYAML, jsonschema, FastAPI, uvicorn, python-multipart,
+pypdfium2, Pillow, python-dotenv; panel używa lokalnie PDF.js i fontu Public Sans (OFL).

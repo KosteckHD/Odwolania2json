@@ -15,6 +15,8 @@ class RateLimitSettings:
     interval: float = 1.0
     retries: int = 4
     max_wait: float = 60.0
+    concurrency: int = 1
+    timeout: float = 90.0
 
     @classmethod
     def from_environment(cls):
@@ -22,11 +24,14 @@ class RateLimitSettings:
             interval = float(os.getenv("LLM_REQUEST_INTERVAL_SECONDS", "1"))
             retries = int(os.getenv("LLM_MAX_429_RETRIES", "4"))
             max_wait = float(os.getenv("LLM_MAX_RETRY_WAIT_SECONDS", "60"))
-            if not math.isfinite(interval) or not math.isfinite(max_wait) or interval < 0 or max_wait < 0 or retries < 0:
+            concurrency = int(os.getenv("LLM_CONCURRENCY", "1"))
+            timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "90"))
+            if (not math.isfinite(interval) or not math.isfinite(max_wait) or interval < 0 or max_wait < 0
+                    or retries < 0 or not 1 <= concurrency <= 32 or not 1 <= timeout <= 600):
                 raise ValueError
         except ValueError as exc:
             raise ConfigurationError("Nieprawidłowa konfiguracja limitów żądań LLM") from exc
-        return cls(interval, retries, max_wait)
+        return cls(interval, retries, max_wait, concurrency, timeout)
 
 
 def retry_after_seconds(value):
@@ -48,40 +53,60 @@ def retry_after_seconds(value):
 
 
 class RequestCoordinator:
+    """Odstęp między startami żądań (interval) i limit żądań w toku (concurrency) dla całego procesu."""
+
     def __init__(self):
         self.lock = threading.Lock()
         self.next_request = 0.0
+        self.slots = None
+        self.size = 0
+
+    def _slots(self, size):
+        with self.lock:
+            if self.slots is None or self.size != size:
+                self.slots, self.size = threading.BoundedSemaphore(size), size
+            return self.slots
 
     def post(self, connection_factory, host, port, path, body, headers, settings):
-        # The same lock covers requests and rate-limit waits from all clients in this process.
-        with self.lock:
+        with self._slots(settings.concurrency):
             for attempt in range(settings.retries + 1):
-                delay = max(0.0, self.next_request - time.monotonic())
-                if delay > settings.max_wait:
-                    raise DocumentError("llm_rate_limit", "Przekroczono maksymalny czas oczekiwania na limit API")
+                with self.lock:
+                    now = time.monotonic()
+                    delay = max(0.0, self.next_request - now)
+                    if delay > settings.max_wait:
+                        raise DocumentError("llm_rate_limit", "Przekroczono maksymalny czas oczekiwania na limit API")
+                    # rezerwacja startu: kolejne żądanie wystartuje najwcześniej po `interval`
+                    self.next_request = max(now, self.next_request) + settings.interval
                 if delay:
                     time.sleep(delay)
-                connection = connection_factory(host, port, timeout=60)
+                connection = connection_factory(host, port, timeout=settings.timeout)
                 try:
-                    self.next_request = time.monotonic() + settings.interval
                     connection.request("POST", path, body=body, headers=headers)
                     response = connection.getresponse()
                     status = response.status
-                    retry_after = response.getheader("Retry-After") if status == 429 else None
+                    retry_after = response.getheader("Retry-After") if status in (429, 503) else None
                     payload = response.read() if status == 200 else b""
                 except (OSError, HTTPException) as exc:
+                    # zerwane połączenie lub przekroczony czas: do 2 ponowień, potem błąd dokumentu
+                    if attempt < min(2, settings.retries):
+                        time.sleep(min(2 ** attempt, settings.max_wait))
+                        continue
                     raise DocumentError("llm_connect", "Brak odpowiedzi ze skonfigurowanego API LLM") from exc
                 finally:
                     connection.close()
                 if status == 200:
                     return payload
-                if status != 429:
+                # 429 (limit) i chwilowe błędy bramki 5xx (np. 504 przy przeciążeniu) ponawiamy z odczekaniem
+                if status not in (429, 500, 502, 503, 504):
                     raise DocumentError("llm_http", f"API LLM zwróciło kod HTTP {status}")
                 requested = retry_after_seconds(retry_after)
                 backoff = 2 ** min(attempt, 10)
                 wait = max(settings.interval, requested if requested is not None else backoff)
-                self.next_request = max(self.next_request, time.monotonic() + wait)
+                with self.lock:
+                    self.next_request = max(self.next_request, time.monotonic() + wait)
                 if attempt == settings.retries or wait > settings.max_wait:
+                    if status != 429:
+                        raise DocumentError("llm_http", f"API LLM zwróciło kod HTTP {status}")
                     raise DocumentError("llm_rate_limit", "Dostawca ograniczył liczbę żądań LLM")
 
 

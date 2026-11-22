@@ -6,21 +6,50 @@ import json
 from evaluation.evaluate import compare, evaluate, metrics
 
 
+def total_of(counts):
+    total = Counter()
+    for item in counts.values():
+        total.update(item)
+    return total
+
+
 def test_list_matching_prevents_mixing_parties():
     expected = [{"nip": "001", "nazwa": "A"}, {"nip": "002", "nazwa": "B"}]
     reordered = [{"nip": "002", "nazwa": "B"}, {"nip": "001", "nazwa": "A"}]
     assert all(counts["fp"] == counts["fn"] == 0 for counts in compare(expected, reordered).values())
     swapped = [{"nip": "002", "nazwa": "A"}, {"nip": "001", "nazwa": "B"}]
     names = compare(expected, swapped)["[].nazwa"]
-    assert names["tp"] == 0 and names["fp"] == names["fn"] == 2
+    # UZP: błędna wartość to jeden FP
+    assert names["tp"] == 0 and names["fp"] == 2 and names["fn"] == 0
+    strict = compare(expected, swapped, mode="strict")["[].nazwa"]
+    assert strict["tp"] == 0 and strict["fp"] == strict["fn"] == 2
 
 
 def test_missing_and_wrong_values_count_false_negatives_and_positives():
-    counts = compare({"x": "001", "amount": 5}, {"x": "1", "amount": None})
-    total = Counter()
-    for item in counts.values():
-        total.update(item)
-    assert metrics(total) == {"tp": 0, "fp": 1, "fn": 2, "f1": 0.0}
+    expected, predicted = {"x": "001", "amount": 5}, {"x": "1", "amount": None}
+    # UZP: wartość błędna (x) = FP, brak wartości (amount) = FN
+    assert metrics(total_of(compare(expected, predicted))) == {"tp": 0, "fp": 1, "fn": 1, "f1": 0.0}
+    assert metrics(total_of(compare(expected, predicted, mode="strict"))) == {"tp": 0, "fp": 1, "fn": 2, "f1": 0.0}
+    # wartość tam, gdzie wzorzec ma null, to FP
+    assert metrics(total_of(compare({"x": None}, {"x": "5"}))) == {"tp": 0, "fp": 1, "fn": 0, "f1": 0.0}
+
+
+def test_long_strings_count_from_80_percent_similarity():
+    expected = {"ZamowieniePubliczne": {"tytul": "Budowa drogi gminnej w miejscowości Kowale"},
+                "przelew_bankowy": {"tytul": "WPIS OD ODWOŁANIA, ZAM: GMINA KOWALE"}}
+    close = {"ZamowieniePubliczne": {"tytul": "Budowa drogi gminnej w miejscowosci Kowale."},
+             "przelew_bankowy": {"tytul": "Wpis od odwołania zam: Gmina Kowale"}}
+    assert total_of(compare(expected, close))["tp"] == 2
+    far = {"ZamowieniePubliczne": {"tytul": "Dostawa sprzętu komputerowego"}, "przelew_bankowy": {"tytul": "Opłata"}}
+    assert total_of(compare(expected, far)) == Counter({"fp": 2})
+    # krótkie pola (np. numer postępowania) dalej wymagają pełnej zgodności
+    assert compare({"a": {"numer": "ZP.1.2025"}}, {"a": {"numer": "ZP.1.2026"}})["a.numer"]["fp"] == 1
+
+
+def test_account_prefix_and_pesel_type_do_not_change_the_score():
+    expected = {"przelew_bankowy": {"na_rachunek": "60101010100081362231000000"}, "pesel": 85071204278}
+    predicted = {"przelew_bankowy": {"na_rachunek": "PL60101010100081362231000000"}, "pesel": "85071204278"}
+    assert total_of(compare(expected, predicted)) == Counter({"tp": 2})
 
 
 def test_match_by_shared_identifier_and_equal_json_numbers():

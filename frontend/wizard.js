@@ -146,7 +146,7 @@ export function buildYaml(spec) {
   const negative = buildPatterns(spec.negative, spec.regex);
   const out = [
     `# Typ dokumentu: ${label || id}`,
-    "# Przygotowano w kreatorze panelu Odwołania2JSON.",
+    "# Przygotowano w kreatorze panelu KIOdczyt.",
     `id: ${id}`,
     `schema: ${id}.schema.json`,
     "classification:",

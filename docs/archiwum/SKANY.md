@@ -11,7 +11,7 @@ Model nie dostaje obrazu strony. Gdy strona PDF nie ma warstwy tekstu (mniej ni�
 ## Zestawy testowe
 
 1. **Skany UZP** (`dane/skany/` z repozytorium UZP, commit `eb1ab44`): 10 odwołań (4–7 stron), 10 pełnomocnictw, 10 potwierdzeń przelewu, każdy ze wzorcowym JSON-em. Wyglądają jak skaner biurowy: lekki przekos, kropki, ciemny brzeg, ślady zagięcia.
-2. **Brudne skany** z [`evaluation/dirty_scans.py`](../evaluation/dirty_scans.py), zrobione z 9 PDF-ów ze spraw UZP 01–03 (część rozwojowa; sprawy 55–60 zostają nietknięte). Cztery poziomy:
+2. **Brudne skany** z [`evaluation/dirty_scans.py`](../../evaluation/dirty_scans.py), zrobione z 9 PDF-ów ze spraw UZP 01–03 (część rozwojowa; sprawy 55–60 zostają nietknięte). Cztery poziomy:
 
 | Poziom | Rozdzielczość | Obrót | Pozostałe zniekształcenia |
 | --- | ---: | ---: | --- |
@@ -26,7 +26,7 @@ Sztucznie zabrudzony PDF nie zastępuje wydrukowanej i zeskanowanej kartki. Pozw
 
 ## Metoda
 
-[`evaluation/ocr_quality.py`](../evaluation/ocr_quality.py) przepuszcza każdy skan przez `extract_pdf` z `tesseract_ocr`, czyli dokładnie przez kod backendu, i sprawdza, czy wartości pól ze wzorcowego JSON-a dają się znaleźć w tekście po OCR. Wartości porównujemy bez spacji, interpunkcji i wielkości liter; daty także jako DD.MM.RRRR i „D miesiąca RRRR”. Pola słownikowe i 0/1 pomijamy. Model językowy nie bierze udziału, więc to **nie jest F1 ekstrakcji**, tylko górna granica tego, co model może przeczytać. Część błędów OCR model może poprawić sam, np. oczywiste „@” w adresie e-mail.
+[`evaluation/ocr_quality.py`](../../evaluation/ocr_quality.py) przepuszcza każdy skan przez `extract_pdf` z `tesseract_ocr`, czyli dokładnie przez kod backendu, i sprawdza, czy wartości pól ze wzorcowego JSON-a dają się znaleźć w tekście po OCR. Wartości porównujemy bez spacji, interpunkcji i wielkości liter; daty także jako DD.MM.RRRR i „D miesiąca RRRR”. Pola słownikowe i 0/1 pomijamy. Model językowy nie bierze udziału, więc to **nie jest F1 ekstrakcji**, tylko górna granica tego, co model może przeczytać. Część błędów OCR model może poprawić sam, np. oczywiste „@” w adresie e-mail.
 
 Przy brudnych skanach mianownikiem są wartości, które da się znaleźć w warstwie tekstu oryginału; CER i WER liczymy względem tej warstwy. Skany UZP nie mają oryginału z tekstem, więc tam mianownikiem są wszystkie wartości wzorca (co najmniej 4 znaki po normalizacji). Część z nich może nie występować w treści dosłownie, więc ten wynik jest zaniżony.
 

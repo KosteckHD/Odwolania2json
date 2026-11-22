@@ -1,6 +1,6 @@
 # Tablica zadań
 
-Główna ścieżka wykorzystuje jeden [system prompt](../prompts/system_pl.md) i jedno wywołanie LLM na PDF. Backend odpowiada za jakość ekstrakcji wszystkich klas. Frontend przejmuje obsługę plików i prezentację wyników. Łączy je [kontrakt HTTP](INTERFACES.md#api-dla-frontendu).
+Główna ścieżka wykorzystuje jeden [system prompt](../../prompts/system_pl.md) i jedno wywołanie LLM na PDF. Backend odpowiada za jakość ekstrakcji wszystkich klas. Frontend przejmuje obsługę plików i prezentację wyników. Łączy je [kontrakt HTTP](INTERFACES.md#api-dla-frontendu).
 
 | ID | Zadanie | Osoba | Priorytet | Status | Zależności | Kryterium akceptacji |
 | --- | --- | --- | --- | --- | --- | --- |
