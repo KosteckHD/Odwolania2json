@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -11,6 +12,19 @@ from .contracts import (
     JsonObject,
     LLMClient,
 )
+
+
+def _dump_raw(document: ExtractedDocument, response: object) -> None:
+    """Diagnostyka: surowa odpowiedź modelu (przed regułami `postprocess:`) do katalogu z LLM_RAW_DUMP_DIR.
+    Służy do pomiaru stabilności modelu między przebiegami; domyślnie wyłączona."""
+    target = os.getenv("LLM_RAW_DUMP_DIR", "").strip()
+    if not target:
+        return
+    source = document.source_path
+    name = f"{source.parent.name}__{source.stem}.json"
+    path = Path(target) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(response, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class PromptExtractor:
@@ -44,6 +58,7 @@ class PromptExtractor:
         extra = {"images": tuple(images)} if images else {}   # skany przy SCAN_MODE=image
         response = self.client.extract_json(instructions=self.instructions, text=text, schema=self.response_schema,
                                             **extra)
+        _dump_raw(document, response)
         if not self.validator.is_valid(response):
             raise DocumentError("invalid_output", "Odpowiedź LLM ma nieprawidłowy format klasy lub danych")
         return ClassificationResult(response["typ"], "llm"), response["dane"]
