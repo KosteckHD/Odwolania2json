@@ -1,0 +1,40 @@
+id: odwolanie
+schema: odwolanie.schema.json
+classification:
+  positive_patterns:
+    - '(?im)^\s*odwołanie(?:\s+do\s+(?:prezesa|krajowej).*)?\s*$'
+    - '(?i)wnos(?:zę|imy)\s+(?:niniejsze\s+)?odwołanie'
+    - '(?i)odwołujący\s*:'
+    - '(?i)zamawiający\s*:'
+  negative_patterns:
+    - '(?im)^\s*(?:wyrok|postanowienie|odpowiedź na odwołanie|zgłoszenie przystąpienia)\b'
+  minimum_matches: 2
+options:
+  llm_instructions: |
+    - `OdwolanieKIO.data` oraz `miejscowosc` pochodzą z nagłówka pierwszej strony. Data publikacji postępowania, data przelewu i data wniesienia z innej części tekstu pełnią inne role.
+    - Zaskarżona czynność to zdanie, w którym odwołujący wskazuje, co zamawiający zrobił lub czego zaniechał, zwykle z datą, np. „Zamawiający w dniu 5 maja 2026 roku odrzucił ofertę Odwołującego” albo „…czynności Zamawiającego polegającej na…”. Stoi najczęściej na początku pisma, przed zarzutami lub w ich wstępie. To zdanie rozstrzyga `czynnosc_powod_id` i `czynnosc_dzien`; treść poszczególnych zarzutów, uzasadnienie i wnioski są tylko tłem (zarzuty o OPZ lub kryteriach nie zmieniają powodu, jeśli zaskarżona czynność jest inna). Wybierz powód tak:
+      - zamawiający odrzucił ofertę → 1; wybrał ofertę najkorzystniejszą lub ogłosił wynik → 2; wykluczył wykonawcę → 3; unieważnił postępowanie → 9;
+      - zamawiający nie odrzucił oferty innego wykonawcy → 7; nie wykluczył wykonawcy → 8; nie unieważnił postępowania → 10;
+      - zaskarżona jest treść dokumentów zamówienia: opublikowanie ogłoszenia lub SWZ → 4; zmiana SWZ → 5; odpowiedzi lub wyjaśnienia treści SWZ → 6; opis przedmiotu zamówienia → 11; projektowane postanowienia umowy → 12.
+      Przepisz `czynnosc_opis` dokładnie ze słownika dołączonego do schematu dla wybranego numeru. Przy nierozstrzygniętym powodzie zwróć `null` w obu polach. `czynnosc_dzien` to data z tego zdania (data czynności lub powzięcia o niej wiadomości), a nie data pisma, ogłoszenia czy przelewu.
+    - `Odwolujacy` i `Zamawiajacy` to odrębne listy. Jeżeli odwołujący działa jako konsorcjum, przypisz nazwę i identyfikatory wskazanego lidera. W `nazwa`, `krs`, `nip` i `regon` odwołującego nie wpisuj danych kancelarii, adresata pisma ani podmiotu wymienionego w uzasadnieniu. W `pelnomocnik` zapisz wyłącznie pełnomocnika danego odwołującego:
+      - `imie_nazwisko`: pierwsza osoba wskazana jako pełnomocnik (np. po „reprezentowana przez:”), bez tytułu `adw.`, `r. pr.`.
+      - `nazwa`: nazwa kancelarii lub spółki, w której działa pełnomocnik, np. z wiersza „adres do korespondencji: Kancelaria …”, z nagłówka, stopki lub podpisu. Przepisz samą nazwę, bez ulicy, kodu i miasta. Jeżeli dokument podaje taką kancelarię, nie zwracaj `null`.
+      - `mail`: adres e-mail podany w bloku pełnomocnika lub kancelarii (zwykle w wierszu z telefonem pod adresem kancelarii). Nie bierz e-maila zamawiającego ani samego odwołującego.
+      - Przykład: „reprezentowana przez: r. pr. Anna Nowak, adw. Jan Kowalski / adres do korespondencji: Kancelaria Prawna Nowak i Wspólnicy sp.k., ul. Polna 1, 00-001 Warszawa / tel. 000 000 000, biuro@nowak.example” → `{"imie_nazwisko":"Anna Nowak","nazwa":"Kancelaria Prawna Nowak i Wspólnicy sp.k.","mail":"biuro@nowak.example"}`.
+    - W `przez-pelnomocnika` użyj `1` przy potwierdzonym umocowaniu, `0` przy samodzielnym działaniu i `null` przy niejasnym statusie.
+    - `prowadzacy_postepowanie` wypełniaj tylko wtedy, gdy na liście `Zamawiajacy` jest kilku zamawiających: `1` dla wskazanego prowadzącego i `0` dla pozostałych. Przy jednym zamawiającym zawsze użyj `null`, nawet jeśli pismo mówi, że to on prowadzi postępowanie.
+    - Rozróżnij krajowy numer ogłoszenia BZP, europejski TED i wewnętrzny numer postępowania. Format TED to numer ogłoszenia i rok, np. `NNNNNN-RRRR`. Numer BZP zapisz bez spacji w formacie `RRRR/BZP########`, np. `2025/BZP00143067`, a przy korekcie z końcówką, np. `2025/BZP00143067/01`. Zachowaj oryginalny tytuł zamówienia.
+  czynnosc_powod_opisy:
+    '1': Decyzja o odrzuceniu oferty
+    '2': Ogłoszenie wyboru oferty
+    '3': Decyzja o wykluczeniu wykonawcy
+    '4': Publikacja specyfikacji warunków zamówienia (SWZ)
+    '5': Modyfikacja treści SWZ
+    '6': Odpowiedzi/wyjaśnienia do SWZ
+    '7': Zaniechanie odrzucenia oferty
+    '8': Zaniechanie wykluczenia wykonawcy
+    '9': Decyzja o unieważnieniu postępowania
+    '10': Zaniechanie unieważnienia postępowania
+    '11': Opis przedmiotu zamówienia (OPZ)
+    '12': Projektowane postanowienia umowy
