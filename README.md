@@ -4,6 +4,8 @@ Odwołania2JSON przetwarza sprawy KIO partiami. W trybie konkursowym jeden [syst
 
 ## Szybki start dla oceniających
 
+Na serwerze oceny (Azure VM) projekt leży w `/opt/solution`, a komenda oceny jest w [RUN.md](RUN.md) (`docker compose run --rm batch`). Instrukcja wdrożenia: [deploy/VM.md](deploy/VM.md).
+
 1. Python 3.13+: `py -3.13 -m venv .venv`, potem `.venv\Scripts\python.exe -m pip install -r requirements.txt` (Linux: `python3.13 -m venv .venv` i `.venv/bin/python -m pip install -r requirements.txt`).
 2. Skopiuj `.env.example` jako `.env` i wklej klucz API z formularza zgłoszenia po `API_KEY=`. Model i adres są już wpisane: Qwen3.5 9B (Apache 2.0) w IONOS AI Model Hub, serwery w UE.
 3. Umieść PDF-y w `input\<sprawa>\` i uruchom `przetworz.bat` (Linux: `./przetworz.sh`). Wyniki pojawią się w `output\<sprawa>\<nazwa pliku>.json`; dokument spoza trzech klas dostaje plik z samym `{}`.
