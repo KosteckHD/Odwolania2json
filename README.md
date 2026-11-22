@@ -11,7 +11,7 @@ widać, skąd pochodzi w dokumencie.
 
 Szczegóły pomiaru, metoda i ograniczenia: [docs/WYNIKI.md](docs/WYNIKI.md).
 
-**Film z pokazem (1:45):** https://youtu.be/W-GR1I-Tb3c
+**Film z pokazem (1:45):** https://youtu.be/W-GR1I-Tb3c · **Prezentacja (PDF, 10 slajdów):** [docs/prezentacja/KIOdczyt-prezentacja.pdf](docs/prezentacja/KIOdczyt-prezentacja.pdf)
 
 ![Panel KIOdczyt: formularz z polami i źródłem w PDF-ie](docs/obrazy/panel.jpg)
 
@@ -108,7 +108,7 @@ Testy: `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`, potem 
 | `frontend/` | panel WWW |
 | `evaluation/` | ewaluator, eksperymenty, manifest podziału danych |
 | `deploy/`, `RUN.md`, `compose.yaml`, `Dockerfile` | wdrożenie na serwer oceny |
-| `docs/` | wyniki, kontrakt, dodawanie typów, dzienniki eksperymentów, [archiwum](docs/archiwum) |
+| `docs/` | wyniki, prezentacja, kontrakt, dodawanie typów, dzienniki eksperymentów, [archiwum](docs/archiwum) |
 | `tests/` | testy backendu |
 
 Zależności (wszystkie open source, działają na CPU): pypdf, PyYAML, jsonschema, FastAPI, uvicorn, python-multipart,
