@@ -45,6 +45,7 @@ from collections.abc import Mapping
 
 from .contracts import ConfigurationError, DocumentConfig, ExtractedDocument, JsonObject, JsonValue
 from .normalization import NORMALIZERS
+from .pdf_reader import _has_text
 
 
 def _split(path: str) -> list[str]:
@@ -283,9 +284,9 @@ def default_when_multiple(data: JsonObject, config: DocumentConfig) -> JsonObjec
 def require_in_text(data: JsonObject, document: ExtractedDocument, config: DocumentConfig) -> JsonObject:
     """Wartość musi wystąpić w tekście dokumentu (bez odstępów i wielkości liter), inaczej null.
     Chroni przed numerami „przerobionymi” przez model, np. starym numerem ogłoszenia zapisanym w nowym
-    formacie BZP. Pomijane, gdy któraś strona nie ma tekstu (skan czytany z obrazu)."""
+    formacie BZP. Pomijane, gdy któraś strona ma za mało tekstu (skan czytany z obrazu; ten sam próg co w pdf_reader)."""
     paths = config.postprocess.get("require_in_text", [])
-    if not paths or any(not page.text.strip() for page in document.pages):
+    if not paths or any(not _has_text(page.text) for page in document.pages):
         return data
     compact = "".join("\n".join(page.text for page in document.pages).split()).casefold()
     for path in paths:
