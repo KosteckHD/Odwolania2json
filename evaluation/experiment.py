@@ -110,6 +110,7 @@ def main():
     evaluation = subprocess.run([sys.executable, str(ROOT / "evaluation" / "evaluate.py"), "--manifest", str(args.manifest),
                                  "--data", str(args.data), "--predictions", str(output_dir), "--split", args.split,
                                  "--output", str(run_dir / "eval.json"), "--run-report", str(run_dir / "run.json"),
+                                 "--schemas", str(args.schemas),
                                  "--model", env.get("LLM_MODEL", "?"), "--prompt-version", args.prompt.name],
                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
     if evaluation.returncode:
