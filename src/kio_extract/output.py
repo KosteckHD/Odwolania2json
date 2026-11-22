@@ -17,6 +17,8 @@ def write_result(path: Path, data: JsonObject | None, negative_mode: str) -> Non
         try:
             stream.write(content.encode("utf-8"))
             stream.close()
+            # mkstemp tworzy plik 0600; wynik ma być czytelny dla oceniających bez roota.
+            temporary.chmod(0o644)
             temporary.replace(path)
         finally:
             stream.close()
