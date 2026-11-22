@@ -233,3 +233,38 @@ def test_repository_powod_rule(text, model, expected):
     result = postprocess(value, document(text), odwolanie)["OdwolanieKIO"]
     assert result["czynnosc_powod_id"] == expected
     assert result["czynnosc_opis"] == odwolanie.options["czynnosc_powod_opisy"][str(expected)]
+
+
+def test_snap_to_text_ignores_words_from_email_addresses():
+    value = data(strony=[{"osoba": "Anna Szymańska", "kancelaria": "K", "mail": None}])
+    text = "reprezentowany przez: r.pr. Annę Szymańską\ne-mail: anna.szymanska@kancelaria.example"
+    assert postprocess(value, document(text), config())["strony"][0]["osoba"] == "Anna Szymańska"
+
+
+def test_require_in_text_drops_value_rewritten_by_model_but_skips_scans():
+    rules = {"require_in_text": ["sprawa.numer"]}
+    numer = lambda value, *pages: postprocess(data(sprawa={"powod_id": None, "powod_opis": None, "dzien": None, "numer": value}),
+                                               document(*pages), config(rules))["sprawa"]["numer"]
+    assert numer("2020/BZP00594737", "ogłoszenie nr 594737-N-2020") is None
+    assert numer("2022/BZP00395766", "nr 2022/BZP 00395766/01/01") == "2022/BZP00395766"
+    assert numer("2020/BZP00594737", "strona 1", "   ") == "2020/BZP00594737"  # strona bez tekstu (skan)
+
+
+def test_null_if_text_matches_removes_value_built_from_other_number():
+    rules = {"null_if_text_matches": [{"field": "sprawa.numer", "pattern": r"(?P<n>[0-9]{6})-N-(?P<r>[0-9]{4})", "equals": "{n}-{r}"}]}
+    numer = lambda value, text: postprocess(data(sprawa={"powod_id": None, "powod_opis": None, "dzien": None, "numer": value}),
+                                             document(text), config(rules))["sprawa"]["numer"]
+    assert numer("522996-2020", "ogłoszenie nr 522996-N-2020") is None
+    assert numer("999682-2026", "TED 2026/S 160-999682, BZP 522996-N-2020") == "999682-2026"
+    with pytest.raises(ConfigurationError):
+        validate_postprocess({"null_if_text_matches": [{"field": "sprawa.numer", "pattern": "(?P<n>x)", "equals": "{m}"}]}, SCHEMA, OPTIONS)
+
+
+def test_default_when_multiple_fills_only_empty_fields_of_several_elements():
+    rules = {"default_when_multiple": {"strony[].mail": "brak"}}
+    two = [{"osoba": "A", "kancelaria": None, "mail": None}, {"osoba": "B", "kancelaria": None, "mail": "b@x.example"}]
+    assert [s["mail"] for s in postprocess(data(strony=two), document(""), config(rules))["strony"]] == ["brak", "b@x.example"]
+    one = data(strony=[{"osoba": "A", "kancelaria": None, "mail": None}])
+    assert postprocess(one, document(""), config(rules))["strony"][0]["mail"] is None
+    with pytest.raises(ConfigurationError):
+        validate_postprocess({"default_when_multiple": {"sprawa.numer": 0}}, SCHEMA, OPTIONS)

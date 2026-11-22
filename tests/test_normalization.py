@@ -26,3 +26,8 @@ def test_ted_normalization_ignores_newlines_and_preserves_number():
     assert normalize_ted("2026-086-999073") == "2026-086-999073"
     assert normalize_ted("160999682-2026") == "160999682-2026"
     assert normalize_ted("123456-2026") == "123456-2026"
+
+
+def test_ted_normalization_rejects_old_national_notice_number():
+    assert normalize_ted("594737-N-2020") is None
+    assert normalize_ted("594737 - N - 2020") is None

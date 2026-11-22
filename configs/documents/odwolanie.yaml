@@ -92,3 +92,14 @@ postprocess:
   # Prowadzący postępowanie ma sens tylko przy kilku zamawiających; przy jednym null.
   null_when_single:
     - 'Zamawiajacy[].prowadzacy_postepowanie'
+  # Przy kilku zamawiających: 0 dla tych, których pismo nie wskazuje jako prowadzącego.
+  default_when_multiple:
+    'Zamawiajacy[].prowadzacy_postepowanie': 0
+  # Numer BZP musi stać w piśmie (model potrafi przerobić stary numer „594737-N-2020” na nowy format).
+  require_in_text:
+    - 'ZamowieniePubliczne.numer_bzp'
+  # Stary krajowy numer ogłoszenia („522996-N-2020”) to nie TED, także gdy model usunie „-N”.
+  null_if_text_matches:
+    - field: ZamowieniePubliczne.numer_ted
+      pattern: '(?P<numer>[0-9]{6})\s*-\s*N\s*-\s*(?P<rok>[0-9]{4})'
+      equals: '{numer}-{rok}'

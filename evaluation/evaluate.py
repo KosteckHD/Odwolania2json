@@ -167,9 +167,12 @@ def read_json(path):
     return json.loads(text) if text else None
 
 
-def evaluate(manifest, data_dir, prediction_dir, split, metadata=None, run_report=None, mode="uzp"):
-    schemas = {kind: Draft202012Validator(json.loads((ROOT / "schemas" / f"{kind}.schema.json").read_text(encoding="utf-8")),
-                                          format_checker=Draft202012Validator.FORMAT_CHECKER) for kind in CLASSES}
+def evaluate(manifest, data_dir, prediction_dir, split, metadata=None, run_report=None, mode="uzp", schema_dir=None):
+    # typy dokumentów = schematy w katalogu (domyślnie schemas/ repozytorium); nowe typy dochodzą bez zmian w kodzie
+    schema_dir = Path(schema_dir) if schema_dir else ROOT / "schemas"
+    kinds = tuple(sorted(path.name.removesuffix(".schema.json") for path in schema_dir.glob("*.schema.json"))) or CLASSES
+    schemas = {kind: Draft202012Validator(json.loads((schema_dir / f"{kind}.schema.json").read_text(encoding="utf-8")),
+                                          format_checker=Draft202012Validator.FORMAT_CHECKER) for kind in kinds}
     fields = defaultdict(Counter)
     types = defaultdict(Counter)
     matrix = defaultdict(Counter)
@@ -212,7 +215,7 @@ def evaluate(manifest, data_dir, prediction_dir, split, metadata=None, run_repor
         matrix[kind][status] += 1
         if status in ("missing", "invalid_schema", "invalid_json", "not_processed", "processing_error", "output_changed"):
             errors[status] += 1
-        if status not in (*CLASSES, "unknown"):
+        if status not in (*kinds, "unknown"):
             predicted = None
         if status == "unknown":
             predicted = None
@@ -229,7 +232,7 @@ def evaluate(manifest, data_dir, prediction_dir, split, metadata=None, run_repor
             "overall": metrics(total), "types": {key: metrics(value) for key, value in sorted(types.items())},
             "fields": [{"type": kind, "field": field, **metrics(value)} for (kind, field), value in sorted(fields.items())],
             "classification": {key: dict(value) for key, value in sorted(matrix.items())},
-            "negative_false_positives": sum(matrix["unknown"][kind] for kind in CLASSES),
+            "negative_false_positives": sum(matrix["unknown"][kind] for kind in kinds),
             "errors": dict(errors), "extra_files": extra}
 
 
@@ -245,13 +248,14 @@ def main():
     parser.add_argument("--prompt-version", default="unspecified")
     parser.add_argument("--run-report", type=Path, help="Raport CLI z tego samego przebiegu")
     parser.add_argument("--strict", action="store_true", help="Dawny ścisły F1 (błędna wartość = FP + FN, bez podobieństwa tekstu)")
+    parser.add_argument("--schemas", type=Path, default=None, help="Katalog schematów typów (domyślnie schemas/)")
     args = parser.parse_args()
     try:
         manifest = read_json(args.manifest)
         run_report = read_json(args.run_report) if args.run_report else None
         report = evaluate(manifest, args.data, args.predictions, args.split,
                           {"model": args.model, "revision": args.revision, "prompt_version": args.prompt_version}, run_report,
-                          mode="strict" if args.strict else "uzp")
+                          mode="strict" if args.strict else "uzp", schema_dir=args.schemas)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except (OSError, ValueError, KeyError, TypeError) as exc:
