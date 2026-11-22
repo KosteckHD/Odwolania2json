@@ -2,7 +2,7 @@
 
 Siedem slajdów do pokazu z [`docs/DEMO.md`](DEMO.md). Ten sam szkic jest złożony jako deck: [Odwołania2JSON – pitch dla jury](https://claude.ai/artifact/8LMCpKNd6DeYBGvRYi8EnP). Deck jest prywatny, dopóki właściciel nie udostępni go przez menu Share; eksport do PPTX i PDF jest w decku. Wszystkie liczby pochodzą z repozytorium albo z próby na prawdziwym API z 21.11.2026 (źródło przy każdym slajdzie). Brakujące dane są oznaczone **do uzupełnienia**. Nie wpisujemy w ich miejsce szacunków.
 
-Styl: jak panel ([`frontend/DESIGN.md`](../frontend/DESIGN.md)), czyli łososiowy papier `#FAF1EC`, czerwień druku `#9A3218` na etykietach, dane czernią, krój Public Sans, bez cieni i gradientów.
+Styl: jak panel ([`frontend/DESIGN.md`](../../frontend/DESIGN.md)), czyli łososiowy papier `#FAF1EC`, czerwień druku `#9A3218` na etykietach, dane czernią, krój Public Sans, bez cieni i gradientów.
 
 ---
 

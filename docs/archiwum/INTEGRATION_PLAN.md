@@ -15,7 +15,7 @@ Gałąź robocza to `feat/core-engine`. Budżet jednej osoby wynosi 18 godzin pr
 
 Agent wdrażający dostaje szczegółową specyfikację BE01–BE06, testy i zasady wyboru profilu Sonnet lub konkursowego. [Instrukcja wdrożenia backendu](prompts/BACKEND.md)
 
-**Stan wyjściowy.** CLI czyta PDF, uruchamia [wspólny prompt](../prompts/system_pl.md) przez klienta Chat Completions i waliduje wynik. Tryb regułowy jest dostępny lokalnie. Konfiguracja procesu i walidacja są obecnie w `cli.py`. Parser ma punkt wpięcia OCR i zgłasza `ocr_required`, gdy strona pozostaje bez czytelnego tekstu. Do zrobienia są warstwa HTTP, działający OCR, próba na docelowym LLM i evaluator. Na starcie 9 testów przechodzi na Pythonie 3.13.16.
+**Stan wyjściowy.** CLI czyta PDF, uruchamia [wspólny prompt](../../prompts/system_pl.md) przez klienta Chat Completions i waliduje wynik. Tryb regułowy jest dostępny lokalnie. Konfiguracja procesu i walidacja są obecnie w `cli.py`. Parser ma punkt wpięcia OCR i zgłasza `ocr_required`, gdy strona pozostaje bez czytelnego tekstu. Do zrobienia są warstwa HTTP, działający OCR, próba na docelowym LLM i evaluator. Na starcie 9 testów przechodzi na Pythonie 3.13.16.
 
 ### 0–1 h · Kontrakt i dostęp do dostawcy (1 h pracy)
 
