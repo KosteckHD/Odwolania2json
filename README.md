@@ -11,6 +11,8 @@ widać, skąd pochodzi w dokumencie.
 
 Szczegóły pomiaru, metoda i ograniczenia: [docs/WYNIKI.md](docs/WYNIKI.md).
 
+**Film z pokazem (1:45):** https://youtu.be/W-GR1I-Tb3c
+
 ![Panel KIOdczyt: formularz z polami i źródłem w PDF-ie](docs/obrazy/panel.jpg)
 
 ## Uruchomienie
