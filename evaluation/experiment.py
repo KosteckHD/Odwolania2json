@@ -76,8 +76,13 @@ def main():
     run_dir = WORK / args.name
     input_dir = WORK / f"_input-{args.split}"
     output_dir = run_dir / "output"
-    if not input_dir.exists():
+    # wejście przebudowywane, gdy zmienił się zestaw dokumentów (inny manifest, podzbiór, dane)
+    wanted = sorted(item['prediction'] for item in manifest['documents'] if item['split'] == args.split)
+    stamp = input_dir / '.zestaw.json'
+    current = json.dumps({'data': str(args.data), 'docs': wanted}, ensure_ascii=False)
+    if not input_dir.exists() or not stamp.is_file() or stamp.read_text(encoding='utf-8') != current:
         print(f"Przygotowanie wejścia {args.split}: {build_input(manifest, args.data, args.split, input_dir)} PDF")
+        stamp.write_text(current, encoding="utf-8")
     if output_dir.exists():
         shutil.rmtree(output_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
