@@ -39,6 +39,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--prompt", type=Path, default=ROOT / "prompts" / "system_pl.md", help="Plik prompta trybu LLM")
     parser.add_argument("--negative-output", choices=("empty_object", "empty_file"), default="empty_object",
                         help="Wynik dla dokumentu spoza klas: plik z {} (domyślnie, wymóg UZP) albo pusty plik")
+    parser.add_argument("--on-error", choices=("negative", "skip"), default="negative",
+                        help="Dokument z błędem (np. nieczytelny PDF): zapisz wynik jak dla negatywu (domyślnie, "
+                             "plik powstaje dla każdego PDF-u) albo pomiń plik")
     parser.add_argument("--report", type=Path, help="Zapisz raport bieżącego przebiegu poza katalogami input/output")
     args = parser.parse_args(argv)
 
@@ -74,6 +77,13 @@ def main(argv: list[str] | None = None) -> int:
         except DocumentError as exc:
             entry = {"source": name.as_posix(), "output": output, "status": "error", "code": exc.code,
                      "duration_seconds": round(time.monotonic() - started, 3)}
+            if args.on_error == "negative":
+                # plik wyniku powstaje zawsze: brak pliku to utrata wszystkich pól, {} co najwyżej tyle samo
+                try:
+                    write_result(destination, None, args.negative_output)
+                    entry["written"] = "negative"
+                except OSError:
+                    pass
             usage = getattr(client, "last_usage", None)
             if usage:
                 entry["usage"] = usage
@@ -83,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
                           "duration_seconds": round(time.monotonic() - started, 3)},                 f"{name}: output_write: błąd danych lub zapisu wyniku"
         entry = {"source": name.as_posix(), "output": output, "status": "unknown" if kind == "unknown" else "ok",
                  "type": kind, "sha256": digest, "duration_seconds": round(time.monotonic() - started, 3)}
+        if classification.reason.startswith("fallback:"):
+            entry["fallback"] = classification.reason.partition(":")[2]
         usage = getattr(client, "last_usage", None)
         if usage:
             entry["usage"] = usage
@@ -90,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
 
     counts: Counter[str] = Counter()
     failures = 0
+    fallbacks = 0
     results = [None] * len(jobs)
     # z modelem PDF-y idą równolegle (LLM_CONCURRENCY), bez modelu po kolei
     workers = getattr(getattr(client, "rate_limit", None), "concurrency", 1) if client is not None else 1
@@ -103,10 +116,15 @@ def main(argv: list[str] | None = None) -> int:
                 print(line, file=sys.stderr)
             else:
                 counts[kind] += 1
+                if "fallback" in entry:
+                    fallbacks += 1
+                    print(f"{line}: wynik awaryjny z reguł po błędzie modelu", file=sys.stderr)
                 print(line)
 
     classes = ", ".join(f"{kind}={count}" for kind, count in sorted(counts.items())) or "brak wyników"
-    print(f"PDF={len(jobs)}, zapisano={sum(counts.values())}, błędy={failures}; {classes}")
+    written = sum(1 for entry in results if entry and entry.get("written"))
+    print(f"PDF={len(jobs)}, zapisano={sum(counts.values())}, awaryjne={fallbacks}, błędy={failures}"
+          f" (z plikiem {{}}: {written}); {classes}")
     if report_path:
         try:
             report_path.parent.mkdir(parents=True, exist_ok=True)

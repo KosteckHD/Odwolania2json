@@ -36,12 +36,14 @@ class PromptExtractor:
         }
         self.validator = Draft202012Validator(self.response_schema)
 
-    def extract(self, document: ExtractedDocument) -> tuple[ClassificationResult, JsonObject | None]:
+    def extract(self, document: ExtractedDocument, images=()) -> tuple[ClassificationResult, JsonObject | None]:
         text = json.dumps(
             {"strony": [{"numer": page.page_number, "tekst": page.text} for page in document.pages]},
             ensure_ascii=False,
         )
-        response = self.client.extract_json(instructions=self.instructions, text=text, schema=self.response_schema)
+        extra = {"images": tuple(images)} if images else {}   # skany przy SCAN_MODE=image
+        response = self.client.extract_json(instructions=self.instructions, text=text, schema=self.response_schema,
+                                            **extra)
         if not self.validator.is_valid(response):
             raise DocumentError("invalid_output", "Odpowiedź LLM ma nieprawidłowy format klasy lub danych")
         return ClassificationResult(response["typ"], "llm"), response["dane"]

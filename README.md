@@ -22,7 +22,7 @@ py -3.13 -m venv .venv
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-Na Linuksie używaj `python3.13 -m venv .venv` i `.venv/bin/python`. Umieść np. `pismo.pdf` pod `input/case1/`. Wynik pojawi się w `output/case1/pismo.json`. Argumenty `--input` i `--output` wybierają inne katalogi. Dokument spoza obsługiwanych klas dostaje plik o tej samej nazwie z samym `{}` (wymóg UZP); `--negative-output empty_file` zapisuje zamiast tego pusty plik. CLI zgłasza strony wymagające OCR i przechodzi do następnego pliku. Uruchomienie na świeżym `output/` ułatwia oddzielenie bieżących wyników od poprzednich przebiegów.
+Na Linuksie używaj `python3.13 -m venv .venv` i `.venv/bin/python`. Umieść np. `pismo.pdf` pod `input/case1/`. Wynik pojawi się w `output/case1/pismo.json`. Argumenty `--input` i `--output` wybierają inne katalogi. Dokument spoza obsługiwanych klas dostaje plik o tej samej nazwie z samym `{}` (wymóg UZP); `--negative-output empty_file` zapisuje zamiast tego pusty plik. CLI zgłasza dokumenty, których nie udało się odczytać, zapisuje dla nich `{}` i przechodzi do następnego pliku. Uruchomienie na świeżym `output/` ułatwia oddzielenie bieżących wyników od poprzednich przebiegów.
 
 ## Panel WWW
 
@@ -54,7 +54,9 @@ API uruchom przez `.venv/Scripts/python.exe -m uvicorn --app-dir src kio_extract
 
 Do integracji frontendu na syntetycznych PDF-ach uruchom `.venv/Scripts/python.exe tests/support/fake_llm_server.py` w osobnym terminalu. W terminalu API ustaw `$env:LLM_PROVIDER='chat'`, `$env:LLM_BASE_URL='http://127.0.0.1:8765/v1'` i `$env:LLM_MODEL='fixture'`, a następnie uruchom API podaną komendą. Atrapa rozpoznaje syntetyczny tekst potwierdzenia przelewu i zwraca puste pola zgodne ze schematem.
 
-OCR wymaga programu Tesseract dostępnego w `PATH` oraz danych językowych `pol`. Strony bez wystarczającej warstwy tekstowej są renderowane przez pypdfium2 i przekazywane do OCR.
+Skany (strony bez warstwy tekstowej) nie wymagają dodatkowych programów: pypdfium2 renderuje stronę do JPEG, a ten sam model (Qwen3.5 9B jest multimodalny) przepisuje jej tekst, który idzie dalej zwykłą ścieżką tekstową. Ustawienia: `SCAN_OCR` (`auto` domyślnie: model, gdy jest skonfigurowany, inaczej Tesseract, jeśli jest w `PATH`; także `llm`, `tesseract`, `none`), `SCAN_MODE` (`transcribe` domyślnie albo `image`: obrazy stron od razu w zapytaniu ekstrakcji), `SCAN_MAX_PAGES` (domyślnie 4: pierwsze trzy strony i ostatnia; 0 = wszystkie), `SCAN_SCALE` (1.5) i `SCAN_JPEG_QUALITY` (80). Tryb regułowy korzysta z Tesseracta (z danymi `pol`), gdy jest zainstalowany.
+
+Plik wyniku powstaje dla każdego PDF-u. Gdy zapytanie do modelu ostatecznie zawiedzie (połączenie, limit, niepoprawny JSON lub schemat), wynik powstaje regułami z `configs/documents` (raport przebiegu: pole `fallback`), a dokument nierozpoznany dostaje `{}`. Nieczytelny PDF również dostaje `{}` (raport: `status: error`, `written: negative`); `--on-error skip` przywraca pomijanie pliku.
 
 ## Lokalny pomiar
 
