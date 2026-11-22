@@ -39,6 +39,48 @@ postprocess:
     - field: Odwolujacy[].pelnomocnik.mail
       pattern: '(?i)adres\s+do\s+korespondencji\s*:[^@]{0,300}?(?<![\w.%+-])(?P<value>[\w.%+-]+@[\w-]+(?:\.[\w-]+)+)'
       requires: ['Odwolujacy[].pelnomocnik.imie_nazwisko']
+  classify_by_patterns:
+    # Powód zaskarżonej czynności z tekstu: fragmenty, w których odwołanie nazywa czynność
+    # (zdanie „Zamawiający w dniu <data> …”, pierwszy punkt „polegających na: 1) …”,
+    # „Zarzut nr 1 – …”, „zarzucam Zamawiającemu: 1) …”). Każdy fragment głosuje tylko,
+    # gdy pasuje do dokładnie jednej klasy; model jest nadpisywany tylko, gdy wszystkie głosujące
+    # fragmenty są zgodne (sprzeczne fragmenty = zostaje model). Kolejność klas = pierwszeństwo
+    # („zaniechanie odrzucenia” przed „odrzuceniem”, „modyfikacja SWZ” przed „SWZ”).
+    - field: OdwolanieKIO.czynnosc_powod_id
+      min_votes: 1
+      mode: override
+      segments:
+        - '(?i)zamawiający\s+w\s+dniu\s+(?:[0-9]{1,2}\s+[a-ząćęłńóśźż]+\s+[0-9]{4}|[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2})\s*(?:r\.|roku)?\s*,?\s*(?P<segment>.{1,400}?)(?:\.\s+(?=(?-i:[A-ZĄĆĘŁŃÓŚŹŻ]))|\.?$)'
+        - '(?i)polegając\w*\s+na\s*:?\s*(?:1\s*[).]\s*)?(?P<segment>.{1,300}?)(?:;|\s2\s*[).]\s)'
+        - '(?i)zarzut\w*\s+(?:nr\s*)?1\b\s*[–—-]?\s*(?P<segment>[^:;]{1,250}?)(?:,?\s+tj\.|[:;])'
+        - '(?i)zarzuca(?:m|my)?\s+zamawiającemu\s*:?\s*(?:1\s*[).]\s*)?(?P<segment>.{1,300}?)(?:;|\s2\s*[).]\s|\.\s)'
+      classes:
+        - value: 10
+          patterns: ['(?i)zaniecha\w*\s+unieważnieni\w*', '(?i)\bnie\s+unieważni\w*']
+        - value: 7
+          patterns: ['(?i)zaniecha\w*\s+odrzuceni\w*', '(?i)\bnie\s+odrzuci\w*']
+        - value: 8
+          patterns: ['(?i)zaniecha\w*\s+wykluczeni\w*', '(?i)\bnie\s+wykluczy\w*']
+        - value: 5
+          patterns: ['(?i)(?:modyfikac\w*|zmodyfikow\w*|zmian\w*)\s+(?:treś(?:ć|ci)\s+)?(?:swz|specyfikacji\s+warunków\s+zamówienia)']
+        - value: 6
+          patterns:
+            - '(?i)(?:odpowiedzi|wyjaśnie\w*)(?:\s+(?:i|oraz)\s+wyjaśnie\w*)?\s+(?:do\s+)?(?:treś(?:ć|ci)\s+)?(?:swz|specyfikacji\s+warunków\s+zamówienia)'
+            - '(?i)odpowiedzi\w*\s+na\s+pytania'
+        - value: 12
+          patterns: ['(?i)projektowan\w*\s+(?:istotn\w*\s+)?postanowie\w*\s+umowy']
+        - value: 11
+          patterns: ['(?i)opis\w*\s+przedmiotu\s+zamówienia', '(?i)\bopz\b']
+        - value: 4
+          patterns: ['(?i)specyfikacj\w*\s+warunków\s+zamówienia', '(?i)\bswz\b']
+        - value: 9
+          patterns: ['(?i)unieważni\w*']
+        - value: 3
+          patterns: ['(?i)wyklucz\w*']
+        - value: 1
+          patterns: ['(?i)odrzuc\w*']
+        - value: 2
+          patterns: ['(?i)\bwyb(?:ór|oru|orze|rał\w*|ierając\w*)\b', '(?i)najkorzystniejsz\w*']
   derive:
     # Opis powodu zawsze ze słownika options.czynnosc_powod_opisy (1:1 z czynnosc_powod_id).
     - field: OdwolanieKIO.czynnosc_opis
