@@ -36,11 +36,13 @@ def normalize_bzp(value: str) -> str:
     return f"{year}/BZP{number}" + (f"/{correction}" if correction else "")
 
 
-def normalize_ted(value: str) -> str:
+def normalize_ted(value: str) -> str | None:
+    """Numer ogłoszenia TED jako `NNNNNN-RRRR`."""
     match = re.fullmatch(r"\s*([0-9]{4})\s*[/\-]\s*[Ss]\s*[0-9]{1,3}\s*-\s*([0-9]{6})\s*", value)
     if match:
         return f"{match.group(2)}-{match.group(1)}"
-    return value
+    # stary krajowy numer ogłoszenia (`594737-N-2020`, BZP do 2020 r.) to nie TED
+    return None if re.fullmatch(r"\s*[0-9]{6}\s*-\s*N\s*-\s*[0-9]{4}\s*", value) else value
 
 
 POLISH_MONTHS = (

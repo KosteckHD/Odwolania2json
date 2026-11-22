@@ -165,6 +165,7 @@ def _word_variant(model: str, text: str) -> bool:
 
 
 _WORD = re.compile(r"[^\W\d_]+(?:-[^\W\d_]+)*")
+_ADDRESS = re.compile(r"\S+@\S+|(?:https?://|www\.)\S+", re.IGNORECASE)
 
 
 def snap_to_text(data: JsonObject, document: ExtractedDocument, config: DocumentConfig) -> JsonObject:
@@ -173,7 +174,8 @@ def snap_to_text(data: JsonObject, document: ExtractedDocument, config: Document
     paths = config.postprocess.get("snap_to_text", [])
     if not paths:
         return data
-    text = "\n".join(page.text for page in document.pages)
+    # bez adresów e-mail i WWW: „anna.szymanska@…” to nie pisownia nazwiska z dokumentu
+    text = _ADDRESS.sub(" ", "\n".join(page.text for page in document.pages))
     words = _WORD.findall(text)
     folded = " ".join(word.casefold() for word in words)
     for path in paths:
@@ -261,12 +263,63 @@ def null_when_single(data: JsonObject, config: DocumentConfig) -> JsonObject:
     return data
 
 
+def default_when_multiple(data: JsonObject, config: DocumentConfig) -> JsonObject:
+    """Przy kilku elementach listy puste pole dostaje wartość domyślną (np. `prowadzacy_postepowanie`
+    = 0 dla zamawiających, których pismo nie wskazuje jako prowadzących)."""
+    for path, default in (config.postprocess.get("default_when_multiple") or {}).items():
+        parts = _split(path)
+        last = max(index for index, part in enumerate(parts) if part.endswith("[]"))
+        prefix = [*parts[:last], parts[last].removesuffix("[]")]
+        for parent, key in list(_slots(data, prefix)):
+            items = parent[key]
+            if isinstance(items, list) and len(items) > 1:
+                for item in items:
+                    for owner, field in list(_slots(item, parts[last + 1:])):
+                        if owner[field] is None:
+                            owner[field] = default
+    return data
+
+
+def require_in_text(data: JsonObject, document: ExtractedDocument, config: DocumentConfig) -> JsonObject:
+    """Wartość musi wystąpić w tekście dokumentu (bez odstępów i wielkości liter), inaczej null.
+    Chroni przed numerami „przerobionymi” przez model, np. starym numerem ogłoszenia zapisanym w nowym
+    formacie BZP. Pomijane, gdy któraś strona nie ma tekstu (skan czytany z obrazu)."""
+    paths = config.postprocess.get("require_in_text", [])
+    if not paths or any(not page.text.strip() for page in document.pages):
+        return data
+    compact = "".join("\n".join(page.text for page in document.pages).split()).casefold()
+    for path in paths:
+        for parent, key in list(_slots(data, _split(path))):
+            value = parent[key]
+            if isinstance(value, str) and "".join(value.split()).casefold() not in compact:
+                parent[key] = None
+    return data
+
+
+def null_if_text_matches(data: JsonObject, document: ExtractedDocument, config: DocumentConfig) -> JsonObject:
+    """Null, gdy wartość to inaczej zapisany fragment tekstu innego rodzaju, np. TED `522996-2020`
+    zrobiony przez model ze starego krajowego numeru `522996-N-2020`. `equals` składa wartość z grup wzorca."""
+    rules = config.postprocess.get("null_if_text_matches", [])
+    if not rules:
+        return data
+    text = "\n".join(page.text for page in document.pages)
+    for rule in rules:
+        forbidden = {rule["equals"].format(**match.groupdict()) for match in re.finditer(rule["pattern"], text)}
+        for parent, key in list(_slots(data, _split(rule["field"]))):
+            if isinstance(parent[key], str) and "".join(parent[key].split()) in forbidden:
+                parent[key] = None
+    return data
+
+
 def postprocess(data: JsonObject | None, document: ExtractedDocument, config: DocumentConfig) -> JsonObject | None:
     if not isinstance(data, dict):
         return data
     data = fill_missing(data, document, config)
     data = snap_to_text(data, document, config)
+    data = require_in_text(data, document, config)
+    data = null_if_text_matches(data, document, config)
     data = null_when_single(data, config)
+    data = default_when_multiple(data, config)
     data = classify_by_patterns(data, document, config)
     return derive(data, config)
 
@@ -275,10 +328,10 @@ def validate_postprocess(raw: object, schema: JsonObject, options: Mapping) -> d
     """Sprawdza sekcję `postprocess:` przy wczytywaniu konfiguracji."""
     if raw is None:
         return {}
-    allowed = {"fill_missing", "derive", "snap_to_text", "null_when_single", "classify_by_patterns"}
+    allowed = {"fill_missing", "derive", "snap_to_text", "null_when_single", "classify_by_patterns",
+               "require_in_text", "default_when_multiple", "null_if_text_matches"}
     if not isinstance(raw, dict) or set(raw) - allowed:
-        raise ConfigurationError(
-            "postprocess może mieć tylko fill_missing, snap_to_text, null_when_single, classify_by_patterns i derive")
+        raise ConfigurationError("postprocess może mieć tylko: " + ", ".join(sorted(allowed)))
 
     def scalar(path: str) -> None:
         leaf = schema_leaf(schema, path)
@@ -309,6 +362,27 @@ def validate_postprocess(raw: object, schema: JsonObject, options: Mapping) -> d
         scalar(path)
         if "[]" not in path:
             raise ConfigurationError(f"postprocess: null_when_single wymaga pola elementu listy: {path}")
+    required = raw.get("require_in_text", [])
+    if not isinstance(required, list):
+        raise ConfigurationError("postprocess: require_in_text musi być listą ścieżek")
+    for path in required:
+        scalar(path)
+    for rule in raw.get("null_if_text_matches", []):
+        if not isinstance(rule, dict) or not {"field", "pattern", "equals"} <= set(rule):
+            raise ConfigurationError("postprocess: null_if_text_matches wymaga field, pattern i equals")
+        scalar(rule["field"])
+        groups = set(re.compile(rule["pattern"]).groupindex)
+        try:
+            rule["equals"].format(**{name: "" for name in groups})
+        except (KeyError, IndexError) as error:
+            raise ConfigurationError(f"postprocess: equals {rule['field']} używa grupy spoza wzorca: {error}") from error
+    defaults = raw.get("default_when_multiple", {})
+    if not isinstance(defaults, dict):
+        raise ConfigurationError("postprocess: default_when_multiple musi być słownikiem ścieżka: wartość")
+    for path in defaults:
+        scalar(path)
+        if "[]" not in path:
+            raise ConfigurationError(f"postprocess: default_when_multiple wymaga pola elementu listy: {path}")
     classifiers = raw.get("classify_by_patterns", [])
     if not isinstance(classifiers, list):
         raise ConfigurationError("postprocess: classify_by_patterns musi być listą")
