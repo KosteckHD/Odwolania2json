@@ -9,7 +9,8 @@ widać, skąd pochodzi w dokumencie.
 |---|---|---|---|---|
 | **F1 1,0000** | **F1 1,0000** | **F1 1,0000** | **F1 0,951** (16 pism) | Qwen3.5 9B, open source, UE |
 
-Szczegóły pomiaru, metoda i ograniczenia: [docs/WYNIKI.md](docs/WYNIKI.md).
+Szczegóły pomiaru, metoda i ograniczenia: [docs/WYNIKI.md](docs/WYNIKI.md). Jak działa program krok po kroku,
+od PDF-u do JSON-u: [docs/JAK-TO-DZIALA.md](docs/JAK-TO-DZIALA.md).
 
 **Film z pokazem (1:45):** https://youtu.be/W-GR1I-Tb3c · **Prezentacja (PDF, 10 slajdów):** [docs/prezentacja/KIOdczyt-prezentacja.pdf](docs/prezentacja/KIOdczyt-prezentacja.pdf)
 
@@ -55,6 +56,9 @@ PDF ─► tekst stron (pypdf) ─┬─► model (Qwen3.5 9B): typ + dane wg sc
   numery TED i BZP w formacie wzorców, imiona w mianowniku, dokument spoza klas = plik z samym `{}`.
 - **Odporność:** równoległe zapytania (`LLM_CONCURRENCY`), ponawianie błędów 429/5xx, wynik awaryjny z reguł,
   plik wyniku dla każdego PDF-u.
+
+Pełny opis (zapytanie do modelu, reguły po modelu, skany, obsługa błędów, panel i API):
+[docs/JAK-TO-DZIALA.md](docs/JAK-TO-DZIALA.md).
 
 ## Model i dane
 
