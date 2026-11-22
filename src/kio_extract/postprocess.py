@@ -13,6 +13,14 @@ konkretnych typów dokumentów: wszystko, co robi, wynika z konfiguracji.
         - 'pelnomocnicy[].imie_nazwisko'
       null_when_single:          # pole ważne tylko przy kilku elementach listy
         - 'Zamawiajacy[].prowadzacy_postepowanie'
+      classify_by_patterns:      # wartość kategorii z fragmentów tekstu (tylko przy zgodzie fragmentów)
+        - field: OdwolanieKIO.czynnosc_powod_id
+          segments: ['...(?P<segment>...)...']   # skąd brać fragmenty (pierwsze trafienie każdego)
+          classes:                              # kolejność = pierwszeństwo
+            - {value: 7, patterns: ['zaniechania odrzucenia']}
+            - {value: 1, patterns: ['odrzucenia oferty']}
+          min_votes: 2           # ilu zgodnych fragmentów trzeba, by nadpisać model
+          mode: override         # override (popraw model) albo fill (tylko gdy null)
       derive:                    # pole wyliczone ze słownika w `options`
         - field: OdwolanieKIO.czynnosc_opis
           source: OdwolanieKIO.czynnosc_powod_id
@@ -24,6 +32,12 @@ Zasady `fill_missing` (ostrożne, bo zła wartość to FP, a null przy pustym wz
 - ścieżka z `[]` jest uzupełniana tylko, gdy lista ma dokładnie jeden element
   (przy kilku podmiotach nie wiadomo, do którego należy wartość); pustych list nie tworzy,
 - `requires`: pola, które muszą być niepuste (w tym samym elemencie listy), np. osoba pełnomocnika.
+Zasady `classify_by_patterns` (reguła ma pierwszeństwo przed modelem tylko, gdy jest niemal pewna):
+- każdy wzorzec z `segments` wyznacza co najwyżej jeden fragment (pierwsze trafienie, grupa `segment`),
+- we fragmencie klasy sprawdzane są po kolei, a trafienie wycina dopasowany tekst, więc wcześniejsza
+  klasa („zaniechanie odrzucenia”) zabiera słowa późniejszej („odrzucenie”),
+- fragment głosuje tylko, gdy pasuje do dokładnie jednej klasy; wynik jest ustalany tylko, gdy
+  wszystkie głosujące fragmenty są zgodne i jest ich co najmniej `min_votes`; inaczej zostaje model.
 Reguły `fields:` (tryb bez modelu) dla pól skalarnych bez list działają tu jako `fill_missing`.
 """
 import re
@@ -178,6 +192,49 @@ def snap_to_text(data: JsonObject, document: ExtractedDocument, config: Document
     return data
 
 
+def _vote(segment: str, classes: list[Mapping]) -> JsonValue:
+    """Klasa fragmentu albo None, gdy pasuje do żadnej lub do kilku klas."""
+    found = []
+    for item in classes:
+        hit = False
+        for pattern in item["patterns"]:
+            segment, count = re.subn(pattern, " ", segment)
+            hit = hit or count > 0
+        if hit:
+            found.append(item["value"])
+    return found[0] if len(found) == 1 else None
+
+
+def classify_votes(text: str, rule: Mapping) -> list[JsonValue]:
+    """Głosy fragmentów tekstu (po jednym na wzorzec segmentu, który coś znalazł)."""
+    flat = re.sub(r"\s+", " ", text)
+    votes = []
+    for pattern in rule["segments"]:
+        match = re.search(pattern, flat)
+        if match and match.group("segment"):
+            vote = _vote(match.group("segment"), rule["classes"])
+            if vote is not None:
+                votes.append(vote)
+    return votes
+
+
+def classify_by_patterns(data: JsonObject, document: ExtractedDocument, config: DocumentConfig) -> JsonObject:
+    rules = config.postprocess.get("classify_by_patterns", [])
+    if not rules:
+        return data
+    text = "\n".join(page.text for page in document.pages)
+    for rule in rules:
+        resolved = _resolve(data, rule["field"])
+        if resolved is None:
+            continue
+        if rule.get("mode", "override") == "fill" and resolved[0].get(resolved[1]) is not None:
+            continue
+        votes = classify_votes(text, rule)
+        if len(votes) >= rule.get("min_votes", 1) and all(vote == votes[0] for vote in votes):
+            resolved[0][resolved[1]] = votes[0]
+    return data
+
+
 def derive(data: JsonObject, config: DocumentConfig) -> JsonObject:
     for rule in config.postprocess.get("derive", []):
         target = _resolve(data, rule["field"])
@@ -210,6 +267,7 @@ def postprocess(data: JsonObject | None, document: ExtractedDocument, config: Do
     data = fill_missing(data, document, config)
     data = snap_to_text(data, document, config)
     data = null_when_single(data, config)
+    data = classify_by_patterns(data, document, config)
     return derive(data, config)
 
 
@@ -217,8 +275,10 @@ def validate_postprocess(raw: object, schema: JsonObject, options: Mapping) -> d
     """Sprawdza sekcję `postprocess:` przy wczytywaniu konfiguracji."""
     if raw is None:
         return {}
-    if not isinstance(raw, dict) or set(raw) - {"fill_missing", "derive", "snap_to_text", "null_when_single"}:
-        raise ConfigurationError("postprocess może mieć tylko fill_missing, snap_to_text, null_when_single i derive")
+    allowed = {"fill_missing", "derive", "snap_to_text", "null_when_single", "classify_by_patterns"}
+    if not isinstance(raw, dict) or set(raw) - allowed:
+        raise ConfigurationError(
+            "postprocess może mieć tylko fill_missing, snap_to_text, null_when_single, classify_by_patterns i derive")
 
     def scalar(path: str) -> None:
         leaf = schema_leaf(schema, path)
@@ -249,6 +309,26 @@ def validate_postprocess(raw: object, schema: JsonObject, options: Mapping) -> d
         scalar(path)
         if "[]" not in path:
             raise ConfigurationError(f"postprocess: null_when_single wymaga pola elementu listy: {path}")
+    classifiers = raw.get("classify_by_patterns", [])
+    if not isinstance(classifiers, list):
+        raise ConfigurationError("postprocess: classify_by_patterns musi być listą")
+    for rule in classifiers:
+        scalar(rule["field"])
+        segments, classes = rule.get("segments"), rule.get("classes")
+        if not isinstance(segments, list) or not segments or not isinstance(classes, list) or not classes:
+            raise ConfigurationError(f"postprocess: {rule['field']} wymaga niepustych segments i classes")
+        for pattern in segments:
+            if "segment" not in re.compile(pattern).groupindex:
+                raise ConfigurationError(f"postprocess: segment {rule['field']} wymaga grupy segment")
+        for item in classes:
+            if not isinstance(item, dict) or "value" not in item or not item.get("patterns"):
+                raise ConfigurationError(f"postprocess: klasa {rule['field']} wymaga value i patterns")
+            for pattern in item["patterns"]:
+                re.compile(pattern)
+        if rule.get("mode", "override") not in ("override", "fill"):
+            raise ConfigurationError(f"postprocess: tryb {rule['field']} to override albo fill")
+        if type(rule.get("min_votes", 1)) is not int or rule.get("min_votes", 1) < 1:
+            raise ConfigurationError(f"postprocess: min_votes {rule['field']} musi być liczbą >= 1")
     for rule in derives:
         scalar(rule["field"])
         scalar(rule["source"])
