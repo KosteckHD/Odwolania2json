@@ -1,6 +1,6 @@
 # Wyniki testów jakości
 
-Wersja: gałąź `feat/f1-runda2` (wdrażana na serwer oceny). Model: **Qwen3.5 9B** (open source, Apache 2.0)
+Wersja: gałąź `main` (wdrażana na serwer oceny). Model: **Qwen3.5 9B** (open source, Apache 2.0)
 przez HostYourAI B.V. (przetwarzanie w UE), bez trybu „myślenia”, temperatura 0.
 
 ## Jak liczymy
@@ -26,10 +26,23 @@ przez HostYourAI B.V. (przetwarzanie w UE), bez trybu „myślenia”, temperatu
 | roboczy UZP | 135 | 1,0000 | 1400 / 0 / 0 | 1,000 | 1,000 | 1,000 | 9/9 `{}` |
 | **inny układ** | 30 odwołań | **1,0000** | 606 / 0 / 0 | 1,000 | — | — | — |
 | skany UZP (`dane/skany`) | 30 | ok. 0,97 | — | — | — | — | — |
+| **prawdziwe odwołania** z internetu | 16 | **0,951** | 234 / 13 / 11 | 0,951 | — | — | — |
 
 Klasyfikacja (odwołanie / pełnomocnictwo / przelew / spoza klas) bezbłędna na wszystkich zbiorach.
 Skany czyta ten sam model z obrazu strony (`SCAN_MODE=image`: F1 0,9718; przepisywanie tekstu: 0,9643);
 bez tego skany dawały 0 pól, bo zwykły OCR wymagał programu `tesseract`.
+
+## Prawdziwe dokumenty
+
+Dane UZP są syntetyczne, więc sprawdziliśmy też publiczne dokumenty z internetu (wzorce wypełnione ręcznie):
+- **16 prawdziwych odwołań do KIO** (2020–2024, różne kancelarie, jeden skan): klasyfikacja 16/16, **F1 0,951**
+  (przed poprawkami 0,9125; poprawki nie zmieniły wyników na danych UZP). Słabsze miejsca: data i rodzaj zaskarżonej
+  czynności w długich pismach.
+- **Nowy typ dokumentu bez zmiany kodu:** `orzeczenie_kio` (dwa pliki: YAML + schemat) na 40 orzeczeniach KIO z 2026 r.:
+  **F1 1,0000** po dopisaniu trzech zdań wskazówek (pierwsza wersja 0,989). Typ nie jest częścią wersji do oceny,
+  bo w danych UZP postanowienia KIO są dokumentami spoza klas.
+
+Szczegóły: [eksperymenty/prawdziwe-dane.md](eksperymenty/prawdziwe-dane.md).
 
 ## Jak do tego doszliśmy (walidacja UZP)
 
@@ -60,7 +73,8 @@ braki na błędy), dwa kroki klasyfikacja → ekstrakcja (niższe F1), drzewo de
 
 ## Ograniczenia
 
-- Dane UZP są syntetyczne i z jednego generatora; 1,0000 na nich nie oznacza braku błędów na realnych pismach.
+- Dane UZP są syntetyczne i z jednego generatora; 1,0000 na nich nie oznacza braku błędów na realnych pismach
+  (na 16 prawdziwych odwołaniach: 0,951).
   Zestaw „inny układ” sprawdza odporność na etykiety i kolejność, ale ma czysty tekst i krótkie uzasadnienia.
 - Model jest dostępny przez API (wymóg UZP), więc wynik zależy też od dostępności dostawcy; stąd ponowienia i wynik awaryjny.
 - Reguła powodu odwołania nadpisuje model tylko przy zgodnych fragmentach tekstu; przy innym sformułowaniu zostaje odpowiedź modelu.

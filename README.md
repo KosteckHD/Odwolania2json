@@ -5,9 +5,9 @@
 `output/<sprawa>/<nazwa pliku>.json`. Urzędnik może przejrzeć i poprawić wynik w panelu WWW, gdzie przy każdym polu
 widać, skąd pochodzi w dokumencie.
 
-| Test UZP | Walidacja UZP | Inny układ dokumentów | Model |
-|---|---|---|---|
-| **F1 1,0000** | **F1 1,0000** | **F1 1,0000** | Qwen3.5 9B, open source, UE |
+| Test UZP | Walidacja UZP | Inny układ dokumentów | Prawdziwe odwołania z internetu | Model |
+|---|---|---|---|---|
+| **F1 1,0000** | **F1 1,0000** | **F1 1,0000** | **F1 0,951** (16 pism) | Qwen3.5 9B, open source, UE |
 
 Szczegóły pomiaru, metoda i ograniczenia: [docs/WYNIKI.md](docs/WYNIKI.md).
 
@@ -69,7 +69,8 @@ PDF ─► tekst stron (pypdf) ─┬─► model (Qwen3.5 9B): typ + dane wg sc
 Typ dokumentu to dwa pliki: `configs/documents/<typ>.yaml` (rozpoznawanie, wskazówki dla modelu, opcjonalne reguły)
 i `schemas/<typ>.schema.json` (pola wyniku). Można je dodać ręcznie albo w panelu: menu ☰ → „Typy dokumentów” →
 kreator, który zapisuje oba pliki na serwerze; serwer sprawdza je regułami ze startu i od razu zaczyna rozpoznawać
-nowy typ, a panel buduje dla niego formularz ze schematu. Opis: [docs/ADD_DOCUMENT_TYPE.md](docs/ADD_DOCUMENT_TYPE.md).
+nowy typ, a panel buduje dla niego formularz ze schematu. Sprawdzone na typie „orzeczenie KIO”: 40 prawdziwych orzeczeń, F1 1,0000
+([test](docs/eksperymenty/prawdziwe-dane.md)). Opis: [docs/ADD_DOCUMENT_TYPE.md](docs/ADD_DOCUMENT_TYPE.md).
 
 ![Kreator nowego typu dokumentu](docs/obrazy/kreator.jpg)
 
