@@ -248,6 +248,7 @@ def test_require_in_text_drops_value_rewritten_by_model_but_skips_scans():
     assert numer("2020/BZP00594737", "ogłoszenie nr 594737-N-2020") is None
     assert numer("2022/BZP00395766", "nr 2022/BZP 00395766/01/01") == "2022/BZP00395766"
     assert numer("2020/BZP00594737", "strona 1", "   ") == "2020/BZP00594737"  # strona bez tekstu (skan)
+    assert numer("2020/BZP00594737", "ogłoszenie nr 594737-N-2020", "- 2 -") == "2020/BZP00594737"  # skan z numerem strony
 
 
 def test_null_if_text_matches_removes_value_built_from_other_number():
