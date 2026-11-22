@@ -9,6 +9,7 @@ from .evidence import locate_evidence, mark_ocr
 from .extraction_engine import resolve_extractor
 from .pdf_reader import _has_text, extract_pdf
 from .prompt_extraction import PromptExtractor
+from .postprocess import postprocess
 from .ocr import tesseract_ocr
 from .normalization import normalize_bzp, normalize_polish_bank_account, normalize_ted
 from .vision import ScanSettings, render_pages, resolve_engine, select_pages, transcribe_pages
@@ -113,6 +114,9 @@ class DocumentProcessor:
             document, images = self._read_scans(path, document)
             self._require_text(document, images)
             classification, data = self.prompted.extract(document, images)
+            if classification.doc_type in self.configs:
+                # poprawki po modelu z sekcji `postprocess:` w YAML (tylko puste pola i reguły typu)
+                data = postprocess(data, document, self.configs[classification.doc_type])
             return self._finish(document, classification, data, (), from_llm=True)
         except DocumentError as exc:
             if exc.code not in FALLBACK_CODES:

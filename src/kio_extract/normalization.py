@@ -43,12 +43,23 @@ def normalize_ted(value: str) -> str:
     return value
 
 
+POLISH_MONTHS = (
+    "stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca",
+    "lipca", "sierpnia", "września", "października", "listopada", "grudnia",
+)
+
+
 def normalize_date(value: str) -> str | None:
-    value = value.strip()
+    """Data ISO z `RRRR-MM-DD`, `DD.MM.RRRR` (też `/` i `-`) albo `D miesiąca RRRR` (dopełniacz)."""
+    value = " ".join(value.split())
     match = re.fullmatch(r"([0-9]{1,2})([./-])([0-9]{1,2})\2([0-9]{4})", value)
     if match:
         day, _, month, year = match.groups()
         value = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+    match = re.fullmatch(r"([0-9]{1,2}) (\w+) ([0-9]{4})(?: r\.?| roku)?", value)
+    if match and match.group(2).lower() in POLISH_MONTHS:
+        day, month, year = match.groups()
+        value = f"{year}-{POLISH_MONTHS.index(month.lower()) + 1:02d}-{day.zfill(2)}"
     if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
         return None
     try:

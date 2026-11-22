@@ -122,11 +122,12 @@ def main():
     for field in worst:
         print(f"  {field['type']:15s} {field['field']:45s} F1={field['f1']:.2f} TP {field['tp']:3d} FP {field['fp']:3d} FN {field['fn']:3d}")
 
-    table = WORK / "results.tsv"
+    table = args.results
+    table.parent.mkdir(parents=True, exist_ok=True)
     if not table.exists():
-        table.write_text("nazwa\tpodział\tF1\tTP\tFP\tFN\ttypy\tczas_s\ttokeny_wej\ttokeny_wyj\tbłędy\tnotatka\n", encoding="utf-8")
+        table.write_text("agent\tnazwa\tpodział\tF1\tTP\tFP\tFN\ttypy\tczas_s\ttokeny_wej\ttokeny_wyj\tbłędy\tnotatka\n", encoding="utf-8")
     with table.open("a", encoding="utf-8") as stream:
-        stream.write(f"{args.name}\t{args.split}\t{overall['f1']:.4f}\t{overall['tp']}\t{overall['fp']}\t{overall['fn']}\t{types}"
+        stream.write(f"{args.agent}\t{args.name}\t{args.split}\t{overall['f1']:.4f}\t{overall['tp']}\t{overall['fp']}\t{overall['fn']}\t{types}"
                      f"\t{elapsed:.0f}\t{tokens['prompt_tokens']}\t{tokens['completion_tokens']}\t{json.dumps(errors)}\t{args.note}\n")
 
 

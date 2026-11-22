@@ -10,3 +10,10 @@ classification:
   negative_patterns:
     - '(?im)^\s*odwołanie\s*$'
   minimum_matches: 1
+postprocess:
+  # Deterministyczne poprawki odpowiedzi modelu (src/kio_extract/postprocess.py).
+  # Imiona i nazwiska w pisowni z dokumentu (diakrytyki, końcówka rodzaju), gdy model ją zmienił.
+  snap_to_text:
+    - 'pelnomocnicy[].imie_nazwisko'
+    - 'mocodawca[].data.imie_nazwisko'
+    - 'mocodawca[].podpisujacy[].imie_nazwisko'
