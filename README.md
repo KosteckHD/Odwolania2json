@@ -14,7 +14,12 @@ od PDF-u do JSON-u: [docs/JAK-TO-DZIALA.md](docs/JAK-TO-DZIALA.md).
 
 **Film z pokazem (1:45):** https://youtu.be/W-GR1I-Tb3c · **Prezentacja (PDF, 10 slajdów):** [docs/prezentacja/KIOdczyt-prezentacja.pdf](docs/prezentacja/KIOdczyt-prezentacja.pdf)
 
-![Panel KIOdczyt: formularz z polami i źródłem w PDF-ie](docs/obrazy/panel.jpg)
+## Prezentacja demo
+
+> [!TIP]
+> **Obejrzyj film demonstracyjny:** kliknij miniaturę poniżej, aby obejrzeć go w serwisie YouTube.
+>
+> [![Obejrzyj demo](docs/obrazy/panel.jpg)](https://youtu.be/W-GR1I-Tb3c)
 
 ## Uruchomienie
 
